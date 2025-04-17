@@ -1,6 +1,6 @@
 # Three Lakes System Decision Support System
 
-Three Lakes System decision support system repository for forecasting water 
+Three Lakes System decision support system (TLS DSS) repository for forecasting water 
 temperature in Shadow Mountain Reservoir using forecasted weather and varying 
 operational pumping regimes.
 
@@ -26,7 +26,7 @@ Secchi disc depth measurements (a measure of water clarity), requiring a
 3.8-meter Secchi depth average and 2.5-meter Secchi depth daily minimum to 
 be met throughout the July 1 to September 11 regulatory season.
 
-Water in the Three Lakes System naturally flows from Grand into Shadow Mountain 
+Water in the Three Lakes System (TLS) naturally flows from Grand into Shadow Mountain 
 into Granby, but pumping operations reverse that natural order by introducing 
 hypolimnetic water (cold water) from Granby reservoir into Shadow Mountain.
 This process reverses natural flow from Shadow Mountain into Grand and finally 
