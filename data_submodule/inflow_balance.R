@@ -14,7 +14,7 @@ inflow_water_balance <- list(
     command = get_kisters_ts_data(station = "M-0009",
                                   ts_id = "28741010",
                                   param = "20_Obs_1Day_Mean_Final",
-                                  # we can use the from/to dates in the tsid dataset, 
+                                  # we can use the from/to dates in the tsid dataset,
                                   # but for now, we just care about 2024 data.
                                   start_date = "2024-04-01",
                                   end_date = "2024-11-01") %>% 
@@ -69,7 +69,6 @@ inflow_water_balance <- list(
             axis.text = element_text(size = 12)) +
       scale_x_date(date_breaks = "1 month") 
   ),
-  
   
   ## East Inlet (NW) ----
 
@@ -145,7 +144,6 @@ inflow_water_balance <- list(
   ),
   
   ## Pump operations (NW) ----
-
   # grab data
   tar_target(
     name = daily_pump_data,
@@ -176,8 +174,7 @@ inflow_water_balance <- list(
   ),
   
   ## Adams Tunnel Delivery (NW) ----
-
-  # grab data
+  
   tar_target(
     name = daily_adams_data,
     command = get_kisters_ts_data(station = "EX-0047",
@@ -207,6 +204,7 @@ inflow_water_balance <- list(
   ), 
   
   ## Colorado River outlet from SMR ----
+  
   tar_target(
     name = raw_CR_SMR_outlet,
     command = get_NWIS_data_by_site(site_number = "09015000", 
@@ -242,7 +240,7 @@ inflow_water_balance <- list(
       scale_x_date(date_breaks = "1 month"),
     packages = "tidyverse"),
   
-  ## make some sense of this ----
+  ## make some sense of this visually ----
   
   # plot all together
   tar_target(
