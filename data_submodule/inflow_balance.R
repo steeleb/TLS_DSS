@@ -71,7 +71,7 @@ inflow_water_balance <- list(
   ),
   
   ## East Inlet (NW) ----
-
+  
   # grab the daily data from Kisters data service
   tar_target(
     name = eastinlet_daily,
@@ -240,6 +240,38 @@ inflow_water_balance <- list(
       scale_x_date(date_breaks = "1 month"),
     packages = "tidyverse"),
   
+  ## TLS elevation ----
+  
+  tar_target(
+    name = SMR_elevation,
+    command = get_kisters_ts_data(station = "SC-0033",
+                                  ts_id = "33746010",
+                                  param = "20_Obs_BOD_Final",
+                                  start_date = "2024-04-01", 
+                                  end_date = "2024-11-01",
+                                  datasource = 1)%>% 
+      filter(!is.na(datetime)) %>% 
+      mutate(date = ymd(format(as.POSIXct(datetime), "%Y-%m-%d"))) %>% 
+      select(date, 
+             SMR_elev_ft = value),
+    packages = c("tidyverse", "httr2", "rvest")
+  ),
+  
+  tar_target(
+    name = GL_elevation,
+    command = get_kisters_ts_data(station = "SC-0018",
+                                  ts_id = "33747010",
+                                  param = "20_Obs_BOD_Final",
+                                  start_date = "2024-04-01", 
+                                  end_date = "2024-11-01",
+                                  datasource = 1)%>% 
+      filter(!is.na(datetime)) %>% 
+      mutate(date = ymd(format(as.POSIXct(datetime), "%Y-%m-%d"))) %>% 
+      select(date, 
+             GL_elev_ft = value),
+    packages = c("tidyverse", "httr2", "rvest")
+  ),
+  
   ## make some sense of this visually ----
   
   # plot all together
@@ -287,26 +319,49 @@ inflow_water_balance <- list(
   ),
   
   tar_target(
+    name = elevation_graph,
+    command = {
+      smr_gl <- full_join(SMR_elevation, GL_elevation) %>% 
+        pivot_longer(cols = c("SMR_elev_ft", "GL_elev_ft"),
+                     names_to = "reservoir",
+                     values_to = "elevation") %>% 
+        mutate(elevation = as.numeric(elevation))
+      ggplot(smr_gl, aes(x = date, y = elevation, color = reservoir)) +
+        geom_point() +
+        theme_bw() +
+        labs(x = NULL,
+             y = "waterbody elevation (ft)") +
+        theme(axis.title = element_text(face = "bold", size = 12),
+              legend.position = c(0.85, 0.2),  # Inset position
+              legend.background = element_rect(fill = alpha("white", 0.7))) +
+        scale_color_manual(values = c("SMR_elev_ft" = "blue", "GL_elev_ft" = "orange"),
+                           labels = c("Shadow Mountain Reservoir", "Grand Lake"))
+    }
+  ),
+  
+  tar_target(
     name = plot_balance,
     command = {
       TLS_long <- TLS_balance %>%
         pivot_longer(cols = c(three_day_ave, seven_day_ave),
                      names_to = "n_day",
                      values_to = "ave_value")
-      ggplot(TLS_long, aes(x = date, y = balance_flow)) +
+      plot <- ggplot(TLS_long, aes(x = date, y = balance_flow)) +
         geom_point() +
         geom_abline(slope = 0, intercept = 0, linewidth = 1) +
         geom_line(data = TLS_long, aes(y = ave_value, color = n_day)) +
         theme_bw() +
         labs(x = NULL,
-          y = "net flow (average cfs per day)",
-          color = "rolling average") +
+             y = "net flow (average cfs per day)",
+             color = "rolling average") +
         theme(axis.title = element_text(face = "bold", size = 12),
-          legend.position = c(0.85, 0.5),  # Inset position
-          legend.background = element_rect(fill = alpha("white", 0.7))) +
-        scale_color_manual(values = c("three_day_ave" = "blue", "seven_day_ave" = "orange"),
-          labels = c("3-day average", "7-day average"))
-    }
+              legend.position = c(0.85, 0.5),  # Inset position
+              legend.background = element_rect(fill = alpha("white", 0.7))) +
+        scale_color_manual(values = c("three_day_ave" = "grey", "seven_day_ave" = "grey10"),
+                           labels = c("3-day average", "7-day average"))
+      plot_grid(elevation_graph, plot, ncol = 1)
+    },
+    packages = c("tidyverse", "cowplot")
   )
   
 )
