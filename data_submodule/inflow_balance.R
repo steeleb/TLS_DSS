@@ -7,25 +7,14 @@ inflow_water_balance <- list(
   
   ## North Fork Colorado River above Shadow Mountain (Northern Water) ----
   
-  # get the tsid for the Q data - this isn't super necessary for this workflow,
-  # but so you can see where this information comes from... 
-  tar_target(
-    name = northfork_tsids,
-    command = get_kisters_ts_info(station_no = "M-0009",
-                                  params = "Q"),
-    packages = c("tidyverse", "httr2", "rvest"),
-    cue = tar_cue("always")
-  ),
-  
-  # grab the daily data from Kisters data service, there are 2 ts_id's here, one
-  # is for the instantaneous data, the other is the daily average, we want the 
-  # daily average.
+  # grab the daily data from Kisters data service, ts_id and param names have been
+  # identified in the NASA-NW repository workflow
   tar_target(
     name = northfork_daily,
     command = get_kisters_ts_data(station = "M-0009",
-                                  ts_id = northfork_tsids$ts_id[2],
-                                  param = northfork_tsids$ts_name[2],
-                                  # we can use the from/to dates in the tsid dataset, 
+                                  ts_id = "28741010",
+                                  param = "20_Obs_1Day_Mean_Final",
+                                  # we can use the from/to dates in the tsid dataset,
                                   # but for now, we just care about 2024 data.
                                   start_date = "2024-04-01",
                                   end_date = "2024-11-01") %>% 
@@ -51,23 +40,12 @@ inflow_water_balance <- list(
   
   ## North Inlet (NW) ----
   
-  # get the tsid for the Q data 
-  tar_target(
-    name = northinlet_tsids,
-    command = get_kisters_ts_info(station_no = "FS-0046",
-                                  params = "Q"),
-    packages = c("tidyverse", "httr2", "rvest"),
-    cue = tar_cue("always")
-  ),
-  
-  # grab the daily data from Kisters data service, there are 2 ts_id's here, one
-  # is for the instantaneous data, the other is the daily average, we want the 
-  # daily average.
+  # grab the daily data from Kisters data service
   tar_target(
     name = northinlet_daily,
     command = get_kisters_ts_data(station = "FS-0046",
-                                  ts_id = northinlet_tsids$ts_id[2],
-                                  param = northinlet_tsids$ts_name[2],
+                                  ts_id = "28721010",
+                                  param = "20_Obs_1Day_Mean_Final",
                                   # we can use the from/to dates in the tsid dataset, 
                                   # but for now, we just care about 2024 data.
                                   start_date = "2024-04-01",
@@ -92,26 +70,14 @@ inflow_water_balance <- list(
       scale_x_date(date_breaks = "1 month") 
   ),
   
-  
   ## East Inlet (NW) ----
-  
-  # get the tsid for the Q data 
-  tar_target(
-    name = eastinlet_tsids,
-    command = get_kisters_ts_info(station_no = "FS-0020",
-                                  params = "Q"),
-    packages = c("tidyverse", "httr2", "rvest"),
-    cue = tar_cue("always")
-  ),
-  
-  # grab the daily data from Kisters data service, there are 2 ts_id's here, one
-  # is for the instantaneous data, the other is the daily average, we want the 
-  # daily average.
+
+  # grab the daily data from Kisters data service
   tar_target(
     name = eastinlet_daily,
     command = get_kisters_ts_data(station = "FS-0020",
-                                  ts_id = eastinlet_tsids$ts_id[2],
-                                  param = eastinlet_tsids$ts_name[2],
+                                  ts_id = "28721010",
+                                  param = "20_Obs_1Day_Mean_Final",
                                   # we can use the from/to dates in the tsid dataset, 
                                   # but for now, we just care about 2024 data.
                                   start_date = "2024-04-01",
@@ -178,23 +144,12 @@ inflow_water_balance <- list(
   ),
   
   ## Pump operations (NW) ----
-  
-  # get tsids for daily pump
-  tar_target(
-    name = daily_pump_tsids,
-    command = get_kisters_ts_info(station_no = "EX-0054",
-                                  params = "Q_Pump",
-                                  datasource = 1),
-    packages = c("tidyverse", "httr2", "rvest"),
-    cue = tar_cue("always")
-  ),
-  
   # grab data
   tar_target(
     name = daily_pump_data,
     command = get_kisters_ts_data(station = "EX-0054",
-                                  ts_id = daily_pump_tsids$ts_id,
-                                  param = daily_pump_tsids$parametertype_name,
+                                  ts_id = "28609010",
+                                  param = "01_Obs_1Day_Mean",
                                   start_date = "2024-04-01", 
                                   end_date = "2024-11-01",
                                   datasource = 1)%>% 
@@ -219,9 +174,7 @@ inflow_water_balance <- list(
   ),
   
   ## Adams Tunnel Delivery (NW) ----
-  # I'm not sure if this is the correct site, might be 13 miles down in Estes.
   
-  # grab data
   tar_target(
     name = daily_adams_data,
     command = get_kisters_ts_data(station = "EX-0047",
@@ -251,6 +204,7 @@ inflow_water_balance <- list(
   ), 
   
   ## Colorado River outlet from SMR ----
+  
   tar_target(
     name = raw_CR_SMR_outlet,
     command = get_NWIS_data_by_site(site_number = "09015000", 
@@ -286,7 +240,7 @@ inflow_water_balance <- list(
       scale_x_date(date_breaks = "1 month"),
     packages = "tidyverse"),
   
-  ## make some sense of this ----
+  ## make some sense of this visually ----
   
   # plot all together
   tar_target(
