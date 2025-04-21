@@ -79,3 +79,9 @@ basis.
 
 *Figure 3. Sketch of the TLS DSS dialog user interface*
 
+## Repository Function
+
+This repository is built using {targets} infrastructure. To run the workflow 
+and update the underlying data, use the command `targets::tar_make()` in the R
+console. 
+
