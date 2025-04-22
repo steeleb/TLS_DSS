@@ -122,8 +122,7 @@ inflow_water_balance <- list(
       filter(parameter == "flow_cfs") %>% 
       mutate(date = ymd(format(as.POSIXct(dateTime), "%Y-%m-%d"))) %>% 
       summarize(value = mean(value), 
-                .by = date),
-    packages = "tidyverse"
+                .by = date)
   ),
   
   tar_target(
@@ -220,8 +219,7 @@ inflow_water_balance <- list(
       filter(parameter == "flow_cfs") %>% 
       mutate(date = ymd(format(as.POSIXct(dateTime), "%Y-%m-%d"))) %>% 
       summarize(value = mean(value), 
-                .by = date),
-    packages = "tidyverse"
+                .by = date)
   ),
   
   tar_target(
@@ -237,8 +235,8 @@ inflow_water_balance <- list(
       theme_bw() +
       theme(axis.title.y = element_text(face = "bold", size = 14),
             axis.text = element_text(size = 12)) +
-      scale_x_date(date_breaks = "1 month"),
-    packages = "tidyverse"),
+      scale_x_date(date_breaks = "1 month")
+    ),
   
   ## TLS elevation ----
   
