@@ -18,14 +18,17 @@ inflow_water_balance <- list(
                                   # but for now, we just care about 2024 data.
                                   start_date = "2024-04-01",
                                   end_date = "2024-11-01") %>% 
-      filter(!is.na(datetime)),
+      filter(!is.na(datetime)) %>% 
+      mutate(date = ymd(as.POSIXct(datetime, tz = "Etc/GMT+7")),
+             value = as.numeric(value)) %>% 
+      select(date, value),
     packages = c("tidyverse", "httr2", "rvest")
   ),
   
   tar_target(
     name = northfork_graph,
-    command = ggplot(northfork_daily, aes(x = ymd(format(as.POSIXct(datetime), "%Y-%m-%d")),
-                                          y = as.numeric(value))) +
+    command = ggplot(northfork_daily, aes(x = date,
+                                          y = value)) +
       geom_rect(inherit.aes = FALSE,
                 aes(xmin = ymd("2024-07-01"), xmax = ymd("2024-09-11"), ymin = -Inf, ymax = Inf),
                 fill = "lightblue") +
@@ -50,14 +53,17 @@ inflow_water_balance <- list(
                                   # but for now, we just care about 2024 data.
                                   start_date = "2024-04-01",
                                   end_date = "2024-11-01") %>% 
-      filter(!is.na(datetime)),
+      filter(!is.na(datetime)) %>% 
+      mutate(date = ymd(as.POSIXct(datetime, tz = "Etc/GMT+7")),
+             value = as.numeric(value)) %>% 
+      select(date, value),
     packages = c("tidyverse", "httr2", "rvest")
   ),
   
   tar_target(
     name = northinlet_graph,
-    command = ggplot(northinlet_daily, aes(x = ymd(format(as.POSIXct(datetime), "%Y-%m-%d")),
-                                           y = as.numeric(value))) +
+    command = ggplot(northinlet_daily, aes(x = date,
+                                           y = value)) +
       geom_rect(inherit.aes = FALSE,
                 aes(xmin = ymd("2024-07-01"), xmax = ymd("2024-09-11"), ymin = -Inf, ymax = Inf),
                 fill = "lightblue") +
@@ -82,14 +88,17 @@ inflow_water_balance <- list(
                                   # but for now, we just care about 2024 data.
                                   start_date = "2024-04-01",
                                   end_date = "2024-11-01") %>% 
-      filter(!is.na(datetime)),
+      filter(!is.na(datetime)) %>% 
+      mutate(date = ymd(as.POSIXct(datetime, tz = "Etc/GMT+7")),
+             value = as.numeric(value)) %>% 
+      select(date, value),
     packages = c("tidyverse", "httr2", "rvest")
   ),
   
   tar_target(
     name = eastinlet_graph,
-    command = ggplot(eastinlet_daily, aes(x = ymd(format(as.POSIXct(datetime), "%Y-%m-%d")),
-                                          y = as.numeric(value))) +
+    command = ggplot(eastinlet_daily, aes(x = date,
+                                          y = value)) +
       geom_rect(inherit.aes = FALSE,
                 aes(xmin = ymd("2024-07-01"), xmax = ymd("2024-09-11"), ymin = -Inf, ymax = Inf),
                 fill = "lightblue") +
@@ -120,9 +129,10 @@ inflow_water_balance <- list(
     name = chipmunk_data_daily,
     command = harmonize_NWIS_stream(chipmunk_raw) %>% 
       filter(parameter == "flow_cfs") %>% 
-      mutate(date = ymd(format(as.POSIXct(dateTime), "%Y-%m-%d"))) %>% 
+      mutate(date = ymd(as.POSIXct(dateTime, tz = "Etc/GMT+7"))) %>% 
       summarize(value = mean(value), 
-                .by = date)
+                .by = date) %>% 
+      filter(!is.na(date))
   ),
   
   tar_target(
@@ -152,14 +162,17 @@ inflow_water_balance <- list(
                                   start_date = "2024-04-01", 
                                   end_date = "2024-11-01",
                                   datasource = 1)%>% 
-      filter(!is.na(datetime)),
+      filter(!is.na(datetime)) %>% 
+      mutate(date = ymd(as.POSIXct(datetime, tz = "Etc/GMT+7")),
+             value = as.numeric(value)) %>% 
+      select(date, value),
     packages = c("tidyverse", "httr2", "rvest")
   ),
   
   tar_target(
     name = daily_pump_graph,
-    command = ggplot(daily_pump_data, aes(x = ymd(format(as.POSIXct(datetime), "%Y-%m-%d")),
-                                          y = as.numeric(value))) +
+    command = ggplot(daily_pump_data, aes(x = date,
+                                          y = value)) +
       geom_rect(inherit.aes = FALSE,
                 aes(xmin = ymd("2024-07-01"), xmax = ymd("2024-09-11"), ymin = -Inf, ymax = Inf),
                 fill = "lightblue") +
@@ -182,14 +195,17 @@ inflow_water_balance <- list(
                                   start_date = "2024-04-01", 
                                   end_date = "2024-11-01",
                                   datasource = 1)%>% 
-      filter(!is.na(datetime)),
+      filter(!is.na(datetime)) %>% 
+      mutate(date = ymd(as.POSIXct(datetime, tz = "Etc/GMT+7")),
+             value = as.numeric(value)) %>% 
+      select(date, value),
     packages = c("tidyverse", "httr2", "rvest")
   ),
   
   tar_target(
     name = daily_adams_graph,
-    command = ggplot(daily_adams_data, aes(x = ymd(format(as.POSIXct(datetime), "%Y-%m-%d")),
-                                           y = as.numeric(value))) +
+    command = ggplot(daily_adams_data, aes(x = date,
+                                           y = value)) +
       geom_rect(inherit.aes = FALSE,
                 aes(xmin = ymd("2024-07-01"), xmax = ymd("2024-09-11"), ymin = -Inf, ymax = Inf),
                 fill = "lightblue") +
@@ -217,9 +233,10 @@ inflow_water_balance <- list(
     name = CR_SMR_out_daily,
     command = harmonize_NWIS_stream(raw_CR_SMR_outlet) %>% 
       filter(parameter == "flow_cfs") %>% 
-      mutate(date = ymd(format(as.POSIXct(dateTime), "%Y-%m-%d"))) %>% 
+      mutate(date = ymd(as.POSIXct(dateTime, tz = "Etc/GMT+7"))) %>% 
       summarize(value = mean(value), 
-                .by = date)
+                .by = date) %>% 
+      filter(!is.na(date))
   ),
   
   tar_target(
@@ -249,7 +266,8 @@ inflow_water_balance <- list(
                                   end_date = "2024-11-01",
                                   datasource = 1)%>% 
       filter(!is.na(datetime)) %>% 
-      mutate(date = ymd(format(as.POSIXct(datetime), "%Y-%m-%d"))) %>% 
+      mutate(date = ymd(as.POSIXct(datetime, tz = "Etc/GMT+7")),
+             value = as.numeric(value)) %>% 
       select(date, 
              SMR_elev_ft = value),
     packages = c("tidyverse", "httr2", "rvest")
@@ -264,7 +282,8 @@ inflow_water_balance <- list(
                                   end_date = "2024-11-01",
                                   datasource = 1)%>% 
       filter(!is.na(datetime)) %>% 
-      mutate(date = ymd(format(as.POSIXct(datetime), "%Y-%m-%d"))) %>% 
+      mutate(date = ymd(as.POSIXct(datetime, tz = "Etc/GMT+7")),
+             value = as.numeric(value)) %>% 
       select(date, 
              GL_elev_ft = value),
     packages = c("tidyverse", "httr2", "rvest")
@@ -296,16 +315,13 @@ inflow_water_balance <- list(
                                  northfork_daily,
                                  daily_pump_data),
                        .f = full_join) %>% 
-        mutate(date = ymd(format(as.POSIXct(datetime), "%Y-%m-%d"))) %>% 
-        summarize(inflow = sum(as.numeric(na.omit(value))),
+        summarize(inflow = sum(na.omit(value)),
                   .by = date)
       # outflow should be adams and CR
       outflow <- reduce(.x = list(CR_SMR_out_daily,
-                                  daily_adams_data %>% 
-                                    mutate(date = ymd(format(as.POSIXct(datetime), "%Y-%m-%d")),
-                                           value = as.numeric(value))),
+                                  daily_adams_data),
                         .f = full_join) %>% 
-        summarize(outflow = sum(as.numeric(na.omit(value))),
+        summarize(outflow = sum(na.omit(value)),
                   .by = date)
       # create balance and rolling average
       full_join(inflow, outflow) %>% 
@@ -322,8 +338,7 @@ inflow_water_balance <- list(
       smr_gl <- full_join(SMR_elevation, GL_elevation) %>% 
         pivot_longer(cols = c("SMR_elev_ft", "GL_elev_ft"),
                      names_to = "reservoir",
-                     values_to = "elevation") %>% 
-        mutate(elevation = as.numeric(elevation))
+                     values_to = "elevation")
       ggplot(smr_gl, aes(x = date, y = elevation, color = reservoir)) +
         geom_point() +
         theme_bw() +
@@ -360,6 +375,31 @@ inflow_water_balance <- list(
       plot_grid(elevation_graph, plot, ncol = 1)
     },
     packages = c("tidyverse", "cowplot")
+  ),
+
+  tar_target(
+    name = total_natural_inflow,
+    command = {
+      inflow <- reduce(.x = list(northinlet_daily, 
+                                 eastinlet_daily,
+                                 northfork_daily),
+                       .f = full_join) %>% 
+        summarize(natural_inflow = sum(na.omit(value)),
+                  .by = date)
+      nat_flow <- ggplot(inflow, aes(x = date, y = natural_inflow)) +
+        geom_point() +
+        gghighlight(natural_inflow > 220) +
+        theme_bw() +
+        labs(x = NULL, y = "natural inflow\n(average CFS)", 
+             title = "Total Natural Inflow") +
+        theme(axis.title = element_text(face = "bold", size = 14))
+      plot_grid(daily_adams_graph,
+                daily_pump_graph, 
+                nat_flow, 
+                daily_CR_out_graph,
+                ncol = 1)
+    },
+    packages = c("tidyverse", "cowplot", "gghighlight")
   )
-  
+
 )
