@@ -4,15 +4,17 @@ source("global.R")
 
 # Define the UI
 ui <- page_navbar(
-  title = "TLS-DSS: Three Lakes System - Decision Support System",
+  title = "TLS-DSS: Three Lakes System Decision Support System",
   
   # Home tab ----
   nav_panel(
     title = "Home",
     card(
       card_header("TLS-DSS"),
-      p("Welcome to the Three Lakes System - Decision Support System"),
-      p("This application is under development.")
+      p("Welcome to the Three Lakes System Decision Support System"),
+      p("This application is under development."),
+      p("Use the navigation bar to access submodules (top right burger button 
+        or along the top of the screen, depending on how large your screen is).")
     )
   ),
   

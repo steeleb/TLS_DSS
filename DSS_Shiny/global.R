@@ -34,7 +34,7 @@ list_data_files <- function() {
 # Function to read data file
 read_data_file <- function(filename) {
   # Full path to the file
-  file_path <- file.path("../data_submodule/out/", filename)
+  file_path <- file.path("www", filename)
   
   # Extract file extension
   file_ext <- tolower(tools::file_ext(filename))

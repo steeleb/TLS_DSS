@@ -5,3 +5,6 @@
 
 ## _targets/ folder
 _targets/
+
+## rsconnect folder
+DSS_Shiny/rsconnect/*
