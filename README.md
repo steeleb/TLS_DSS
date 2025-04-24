@@ -85,3 +85,7 @@ This repository is built using {targets} infrastructure. To run the workflow
 and update the underlying data, use the command `targets::tar_make()` in the R
 console. 
 
+## Shiny App
+
+This repository includes code to deploy a shiny app. The app can be accessed 
+[here](https://b-steele.shinyapps.io/dss_shiny/).

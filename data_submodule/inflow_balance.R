@@ -47,7 +47,7 @@ inflow_water_balance <- list(
   tar_target(
     name = northinlet_daily,
     command = get_kisters_ts_data(station = "FS-0046",
-                                  ts_id = "28721010",
+                                  ts_id = "28759010",
                                   param = "20_Obs_1Day_Mean_Final",
                                   # we can use the from/to dates in the tsid dataset, 
                                   # but for now, we just care about 2024 data.
@@ -144,8 +144,7 @@ inflow_water_balance <- list(
                 fill = "lightblue") +
       geom_line() +
       labs(x = NULL, y = "Q (cfs)", 
-           title = "Chipmunk Lane Flow",
-           subtitle = "negative flow is natural flow (GL -> SMR)") +
+           title = "Chipmunk Lane Flow: negative flow is natural flow (GL -> SMR)") +
       theme_bw() +
       theme(axis.title.y = element_text(face = "bold", size = 14),
             axis.text = element_text(size = 12)) +
@@ -253,7 +252,7 @@ inflow_water_balance <- list(
       theme(axis.title.y = element_text(face = "bold", size = 14),
             axis.text = element_text(size = 12)) +
       scale_x_date(date_breaks = "1 month")
-    ),
+  ),
   
   ## TLS elevation ----
   
@@ -303,6 +302,12 @@ inflow_water_balance <- list(
                         daily_CR_out_graph,
                         ncol = 1),
     packages = c("cowplot", "tidyverse")
+  ),
+  
+  tar_target(
+    name = save_stacked_flow,
+    command = ggsave(plot = stacked_plot, filename = "DSS_Shiny/www/stacked_flow.jpg",
+                     dpi = 300, width = 10, height = 10)
   ),
   
   # sum ins and outs
@@ -368,7 +373,7 @@ inflow_water_balance <- list(
              y = "net flow (average cfs per day)",
              color = "rolling average") +
         theme(axis.title = element_text(face = "bold", size = 12),
-              legend.position = c(0.85, 0.5),  # Inset position
+              legend.position = c(0.85, 0.2),  # Inset position
               legend.background = element_rect(fill = alpha("white", 0.7))) +
         scale_color_manual(values = c("three_day_ave" = "grey", "seven_day_ave" = "grey10"),
                            labels = c("3-day average", "7-day average"))
@@ -376,7 +381,14 @@ inflow_water_balance <- list(
     },
     packages = c("tidyverse", "cowplot")
   ),
-
+  
+  tar_target(
+    name = save_water_balance_fig,
+    command = ggsave(plot = plot_balance, filename = "DSS_Shiny/www/water_balance.jpg",
+                     dpi = 300, width = 10, height = 6)
+  ),
+  
+  
   tar_target(
     name = total_natural_inflow,
     command = {
@@ -400,6 +412,33 @@ inflow_water_balance <- list(
                 ncol = 1)
     },
     packages = c("tidyverse", "cowplot", "gghighlight")
+  ),
+  
+  tar_target(
+    name = water_balance_data,
+    command = {
+      data <- reduce(.x = list(northfork_daily %>% 
+                                 rename(NF = value),
+                               northinlet_daily %>% 
+                                 rename(NI = value),
+                               eastinlet_daily %>% 
+                                 rename(EI = value),
+                               daily_pump_data %>% 
+                                 rename(pump = value),
+                               daily_adams_data %>% 
+                                 rename(adams = value),
+                               GL_elevation,
+                               SMR_elevation),
+                     .f = full_join) %>% 
+        mutate(dow = wday(date, label = T)) %>% 
+        relocate(date, dow)
+    }
+  ),
+  
+  tar_target(
+    name = save_water_balance_data,
+    command = write_csv(water_balance_data, 
+                        "DSS_Shiny/www/water_balance.csv")
   )
-
+  
 )
