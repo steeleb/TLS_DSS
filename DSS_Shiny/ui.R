@@ -11,7 +11,12 @@ ui <- page_navbar(
     card(
       card_header("TLS-DSS"),
       p("Welcome to the Three Lakes System Decision Support System"),
-      p("This application is under development."),
+      p("This application is meant to provide decision-making context from a
+        responsive data-informed model to estimate the impacts of varying
+        pump operational regimes on the water temperature at Shadow Mountain
+        Reservoir."),
+      p("This application is under development and currently is being tested on
+        data from the year 2024."),
       p("Use the navigation bar to access submodules (top right burger button 
         or along the top of the screen, depending on how large your screen is).")
     )
@@ -25,29 +30,12 @@ ui <- page_navbar(
       fillable = TRUE,
       layout_sidebar(
         sidebar = sidebar(
-          p("Select either `Show DataTable` or `Show Figure` for display:"),
           fillable = TRUE,
           width = 300,
-          selectInput("displayOption", "Display Option:", 
-                      choices = c("Show DataTable", "Show Figure"),
-                      selected = "Show Figure"),
-          
-          # Conditional panels for DataTable and Figure
-          conditionalPanel(
-            condition = "input.displayOption == 'Show DataTable'",
-            p("Select a data file to display:"),
-            selectInput("dataFile", "Select Data File:", 
-                        choices = list_data_files())
-          ),
-          
-          conditionalPanel(
-            condition = "input.displayOption == 'Show Figure'",
-            p("Select a figure to display:"),
-            selectInput("figures", "Select Figure:",
-                        choices = c("Water Balance" = "waterbalancefigure",
-                                    "Stacked Flow" = "stackedflowfigure"))
-          )
+          selectInput("dataFile", "Select Data Table to Display:", 
+                                  choices = list_data_files())
         ),
+          
         # Main content based on selected option
         div(
           class = "h-100 w-100",  # Use full width/height

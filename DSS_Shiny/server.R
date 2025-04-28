@@ -14,82 +14,17 @@ server <- function(input, output, session) {
   # Dynamic content based on selected display option
   output$dynamicContent <- renderUI({
     # Render dynamic UI for data table or figure based on selected option
-    if (input$displayOption == "Show DataTable") {
-      navset_card_tab(
-        nav_panel(
-          title = "Data Table",
-          DT::dataTableOutput("dataTable")
-        ),
-        nav_panel(
-          title = "Summary",
-          verbatimTextOutput("dataSummary")
-        )
-      )
-    } else if (input$displayOption == "Show Figure") {
-      render_figure(input$figures)
-    }
-  })
-  
-  # Function to render figure based on the selected figure
-  render_figure <- function(figure_type) {
-    figure_list <- list(
-      waterbalancefigure = list(
-        file = figure_paths$water_balance, 
-        title = "Three Lakes System Water Balance",
-        description = "Shadow Mountain Reservoir and Grand Lake surface water height and water balance (average daily inflow - average daily outflow)"
+    navset_card_tab(
+      nav_panel(
+        title = "Data Table",
+        DT::dataTableOutput("dataTable")
       ),
-      stackedflowfigure = list(
-        file = figure_paths$stacked_flow, 
-        title = "Three Lakes System Stacked Flow",
-        description = "Average flow per day across the Three Lakes System"
+      nav_panel(
+        title = "Summary",
+        verbatimTextOutput("dataSummary")
       )
     )
-    
-    if (figure_type %in% names(figure_list)) {
-      figure <- figure_list[[figure_type]]
-      
-      if (file.exists(figure$file)) {
-        card(
-          min_height = 500,
-          full_screen = TRUE,
-          card_header(figure$title),
-          card_body(
-            fill = FALSE, gap = 0,
-            p(class = "text-muted", figure$description)
-          ),
-          card_body(
-            imageOutput(figure_type),
-            class = "p-0"
-          )
-        )
-      } else {
-        card(
-          card_header(figure$title),
-          div(
-            style = "padding: 20px; text-align: center;",
-            h4(paste(figure$title, "figure not found")),
-            p(paste("The file", figure$file, "does not exist."))
-          )
-        )
-      }
-    }
-  }
-  
-  ## figure content ----
-  # Render the figure images for use in dynamic content
-  output$waterbalancefigure <- renderImage({
-    list(src = figure_paths$water_balance,
-         contentType = "image/jpeg",
-         width = "80%",
-         alt = "Water Balance Figure")
-  }, deleteFile = FALSE)
-  
-  output$stackedflowfigure <- renderImage({
-    list(src = figure_paths$stacked_flow,
-         contentType = "image/jpeg",
-         width = "80%",
-         alt = "Stacked Flow Figure")
-  }, deleteFile = FALSE)
+  })
   
   ## table content ----
   # Display data table

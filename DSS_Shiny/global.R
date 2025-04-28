@@ -23,11 +23,6 @@ file_label_lookup <- list(
   "daily_SMR_temp.csv" = "Daily SMR temperature"
 )
 
-
-# Check if figures exist (using lapply for efficiency)
-figure_exists <- sapply(figure_paths, file.exists)
-
-
 # theme for figures
 ROSS_theme <- theme_bw() + #or theme_few()
   theme(plot.title = element_text(hjust = 0.5, face = 'bold'),
@@ -41,10 +36,6 @@ ROSS_lt_pal <- c("#002EA3", "#E70870", "#256BF5",
 
 list_data_files <- function() {
   data_path <- "www"
-  
-  if (!dir.exists(data_path)) {
-    return(character(0))
-  }
   
   files <- list.files(
     path = data_path,
@@ -66,14 +57,9 @@ read_data_file <- function(filename) {
   # Full path to the file
   file_path <- file.path("www", filename)
   
-  # Extract file extension
-  file_ext <- tolower(tools::file_ext(filename))
-  
   # Read file based on extension using switch
   data <- tryCatch({
-    switch(file_ext,
-           csv = read_csv(file_path),
-           stop("Unsupported file format"))
+    read_csv(file_path)
   }, error = function(e) {
     message(paste("Error reading file:", filename, "-", e$message))
     NULL
