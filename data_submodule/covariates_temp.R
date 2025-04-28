@@ -48,7 +48,7 @@ covariates_temp <- list(
     name = met_daily,
     command = {
       # summarize by day
-      SMR_met_daily <- met_raw %>%
+      met_raw %>%
         mutate(date = ymd(as.POSIXct(datetime, tz = "Etc/GMT+7")),
                value = as.numeric(value)) %>% 
         filter(!is.na(date)) %>% 
@@ -68,18 +68,14 @@ covariates_temp <- list(
           SMR_max_wind_mps = max(Wind_Speed_Max, na.rm = T) / 2.237,
           SMR_mean_wind_mps = mean(Wind_Speed_Avg, na.rm = T) / 2.237,
           .by = date) 
-      # get summary of non-na data
-      SMR_met_count <- met_raw %>% 
-        mutate(date = ymd(as.POSIXct(datetime, tz = "Etc/GMT+7"))) %>% 
-        group_by() %>% 
-        summarise(n = n(),
-                  .by = c(date, parameter)) %>% 
-        pivot_wider(names_from = parameter,
-                    values_from = n)
-      # join together for target output
-      left_join(SMR_met_daily, SMR_met_count)
     }
   ), 
+ 
+  # save for use in Shiny
+  tar_target(
+    name = save_met_daily,
+    command = write_csv(x = met_daily, file = "DSS_Shiny/www/daily_met.csv")
+  ),
   
   ## forecast data ----
   
@@ -139,10 +135,17 @@ covariates_temp <- list(
         mutate(date = ymd(format(as.POSIXct(datetime, tz = "Etc/GMT+5"), "%Y-%m-%d"))) %>% 
         summarize(mean_temp_int = mean(temp_degC),
                   .by = date) 
-      left_join(SMR_daily_near_surface, SMR_daily_integrated)
+      left_join(SMR_daily_near_surface, SMR_daily_integrated) %>% 
+        select(-n)
     }
   ),
 
+  # save for use in Shiny
+  tar_target(
+    name = save_SMR_daily,
+    command = write_csv(x = SMR_daily, file = "DSS_Shiny/www/daily_SMR_temp.csv")
+  ),
+  
   # do a quick sanity check
   tar_target(
     name = SMR_daily_graph,

@@ -418,15 +418,17 @@ inflow_water_balance <- list(
     name = water_balance_data,
     command = {
       data <- reduce(.x = list(northfork_daily %>% 
-                                 rename(NF = value),
+                                 rename(northfork_cfs = value),
                                northinlet_daily %>% 
-                                 rename(NI = value),
+                                 rename(northinlet_cfs = value),
                                eastinlet_daily %>% 
-                                 rename(EI = value),
+                                 rename(eastinlet_cfs = value),
                                daily_pump_data %>% 
-                                 rename(pump = value),
+                                 rename(pump_cfs = value),
+                               CR_SMR_out_daily %>% 
+                                 rename(CR_out_cfs = value),
                                daily_adams_data %>% 
-                                 rename(adams = value),
+                                 rename(adams_cfs = value),
                                GL_elevation,
                                SMR_elevation),
                      .f = full_join) %>% 

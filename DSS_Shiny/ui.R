@@ -1,5 +1,4 @@
 # TLS-DSS: UI Definition
-
 source("global.R")
 
 # Define the UI
@@ -18,7 +17,7 @@ ui <- page_navbar(
     )
   ),
   
-  # Underlying Data tab ----
+  # Data Submodule tab ----
   nav_panel(
     title = "Underlying Data",
     card(
@@ -26,22 +25,85 @@ ui <- page_navbar(
       fillable = TRUE,
       layout_sidebar(
         sidebar = sidebar(
+          p("Select either `Show DataTable` or `Show Figure` for display:"),
           fillable = TRUE,
           width = 300,
           selectInput("displayOption", "Display Option:", 
-                      choices = c("Show DataTable", "Show Water Balance Figure", "Show Stacked Flow Figure"),
-                      selected = "Show Stacked Flow Figure"),
+                      choices = c("Show DataTable", "Show Figure"),
+                      selected = "Show Figure"),
           
-          # Only show data file selector when DataTable is selected
+          # Conditional panels for DataTable and Figure
           conditionalPanel(
             condition = "input.displayOption == 'Show DataTable'",
-            selectInput("dataFile", "Select Data File:", choices = list_data_files())
+            p("Select a data file to display:"),
+            selectInput("dataFile", "Select Data File:", 
+                        choices = list_data_files())
+          ),
+          
+          conditionalPanel(
+            condition = "input.displayOption == 'Show Figure'",
+            p("Select a figure to display:"),
+            selectInput("figures", "Select Figure:",
+                        choices = c("Water Balance" = "waterbalancefigure",
+                                    "Stacked Flow" = "stackedflowfigure"))
           )
         ),
         # Main content based on selected option
         div(
-          class = "h-100 w-100",  # Make the div use 100% height and width
+          class = "h-100 w-100",  # Use full width/height
           uiOutput("dynamicContent", class = "h-100")
+        )
+      )
+    )
+  ),
+  
+  # Dialog Submodule ----
+  nav_panel(
+    title = "Dialog Submodule",
+    card(
+      layout_sidebar(
+        sidebar = sidebar(
+          width = 300,
+          selectInput("selectedDate", "Select a Forecast Date:", choices = NULL)
+        ),
+        navset_card_tab(  # Use this to switch between tabs
+          nav_panel(
+            title = "Previous 7 Days Water Temperature",
+            card(
+              plotOutput("prevTempFigure", height = "400px")
+            )
+          ),
+          nav_panel(
+            title = "Previous 7 Days Flow",
+            card(
+              plotOutput("prevFlowFigure", height = "1200px")
+            )
+          ),
+          nav_panel(
+            title = "Previous 7 Days Flow, Aggregated Inflow/Outflow/Balance",
+            card(
+              plotOutput("prevFlowAggregated", height = "900px")
+            )
+          ),
+          nav_panel(
+            title = "Previous 7 Days Met",
+            card(
+              plotOutput("prevMetFigure", height = "900px")
+            )
+          ),
+          nav_panel(
+            title = "Data Tables",
+            div(  # wrap the content directly here
+              card(
+                card_header("Observed Data (Previous 7 Days)"),
+                dataTableOutput("prevDataTable")
+              ),
+              card(
+                card_header("Forecasted Weather (Next 7 Days)"),
+                dataTableOutput("forecastDataTable")
+              )
+            )
+          )
         )
       )
     )

@@ -88,4 +88,6 @@ console.
 ## Shiny App
 
 This repository includes code to deploy a shiny app. The app can be accessed 
-[here](https://b-steele.shinyapps.io/dss_shiny/).
+[here](https://b-steele.shinyapps.io/dss_shiny/). At this time, the App must be 
+manually updated, but updates will be automated within the {targets} pipeline 
+in the future.
