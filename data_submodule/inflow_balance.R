@@ -188,8 +188,8 @@ inflow_water_balance <- list(
   
   tar_target(
     name = daily_adams_data,
-    command = get_kisters_ts_data(station = "EX-0047",
-                                  ts_id = "32892010",
+    command = get_kisters_ts_data(station = "EX-0182",
+                                  ts_id = "33644010",
                                   param = "Q",
                                   start_date = "2024-04-01", 
                                   end_date = "2024-11-01",
