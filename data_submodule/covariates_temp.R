@@ -4,7 +4,7 @@ covariates_temp <- list(
   
   # for the purposes of this application, we'll pull in just the Shadow Mountain
   # Reservoir met data. 
-
+  
   # list the parameters we're interested in to map over
   tar_target(
     name = met_parameters,
@@ -13,8 +13,9 @@ covariates_temp <- list(
                 "Air_Temperature_Max", 
                 "Wind_Speed_Avg",
                 "Wind_Speed_Max",
-                "Solar_Radiation_Total",
-                "Precipitation_Difference_In_Accumulative_WB")
+                "Relative_Humidity_Avg", # in place of precip, because the record is
+                # incomplete
+                "Solar_Radiation_Total")
   ),
   
   # get the timeseries info to iterate over
@@ -43,34 +44,65 @@ covariates_temp <- list(
     packages = c("tidyverse", "httr2", "rvest")
   ),
   
+  # do a cursory QAQC
+  tar_target(
+    name = met_QAQC,
+    command = {
+      met_raw %>% 
+        mutate(datetime = ymd_hms(datetime, tz = "MST"),
+               value = as.numeric(value)) %>% 
+        filter(!is.na(value)) %>% 
+        # both rain bits are incomplete AND Rain Total is all 0s
+        filter(!(parameter %in% c("Rain_Total", "Precipitation_Difference_In_Accumulative_WB"))) %>% 
+        # out of bounds
+        mutate(value = case_when(grepl("Air", parameter) & (value < -50 | value > 100) ~ NA_real_,
+                                 grepl("Humidity", parameter) & value < 0 ~ NA_real_,
+                                 .default = value)) %>% 
+        # wonky reporting
+        pivot_wider(names_from = parameter,
+                    values_from = value) %>% 
+        # make sure that min/max/avg are sensical
+        mutate(across(c(Air_Temperature_Avg, Air_Temperature_Max, Air_Temperature_Min),
+                      ~ if_else(Air_Temperature_Avg > Air_Temperature_Max |
+                                  Air_Temperature_Avg < Air_Temperature_Min,
+                                NA_real_,
+                                .))) %>% 
+        pivot_longer(cols = !datetime,
+                     names_to = "parameter",
+                     values_to = "value", )
+    }
+  ),
+  
   # we need daily summaries of these for the model
   tar_target(
     name = met_daily,
     command = {
       # summarize by day
-      met_raw %>%
-        mutate(date = ymd(as.POSIXct(datetime, tz = "Etc/GMT+7")),
-               value = as.numeric(value)) %>% 
+      met_QAQC %>%
+        mutate(date = as_date(datetime)) %>% 
         filter(!is.na(date)) %>% 
         pivot_wider(names_from = parameter,
                     values_from = value) %>% 
         # summarize and convert to metric units
-        summarise(# deg F to deg C
-          SMR_max_temp_degC = (max(Air_Temperature_Max, na.rm = T) - 32) * 5/9,
-          SMR_min_temp_degC = (min(Air_Temperature_Min, na.rm = T) - 32) * 5/9,
-          SMR_mean_temp_degC = (mean(Air_Temperature_Avg, na.rm = T) - 32) * 5/9, # not ideal to grab average of average, but it'll do
-          # inches to mm
-          SMR_tot_precip_mm = sum(Precipitation_Difference_In_Accumulative_WB, na.rm = T) * 2.54 * 100,
+        summarise(
+          # deg F to deg C
+          max_temp_degC = (max(Air_Temperature_Max, na.rm = T) - 32) * 5/9,
+          min_temp_degC = (min(Air_Temperature_Min, na.rm = T) - 32) * 5/9,
+          mean_temp_degC = (mean(Air_Temperature_Avg, na.rm = T) - 32) * 5/9, # not ideal to grab average of average, but it'll do
+          # just summarize RH
+          min_RH_perc = min(Relative_Humidity_Avg, na.rm = T),
+          mean_RH_perc = mean(Relative_Humidity_Avg, na.rm = T),
+          max_RH_perc = max(Relative_Humidity_Avg, na.rm = T),
           # calories per cm2 to watts per m2
-          SMR_tot_sol_rad_Wpm2 = sum(Solar_Radiation_Total, na.rm = T) * 11.63,
+          tot_sol_rad_Wpm2 = sum(Solar_Radiation_Total, na.rm = T) * 11.63,
           # miles per hour to meters per second
-          SMR_min_wind_mps = min(Wind_Speed_Avg, na.rm = T) / 2.237, # not ideal to do get min from average speed, but it's what we've got
-          SMR_max_wind_mps = max(Wind_Speed_Max, na.rm = T) / 2.237,
-          SMR_mean_wind_mps = mean(Wind_Speed_Avg, na.rm = T) / 2.237,
+          min_wind_mps = min(Wind_Speed_Avg, na.rm = T) / 2.237, # not ideal to do get min from average speed, but it's what we've got
+          max_wind_mps = max(Wind_Speed_Max, na.rm = T) / 2.237,
+          mean_wind_mps = mean(Wind_Speed_Avg, na.rm = T) / 2.237,
           .by = date) 
     }
   ), 
- 
+  
   # save for use in Shiny
   tar_target(
     name = save_met_daily,
@@ -84,7 +116,7 @@ covariates_temp <- list(
   # have systematic issues, which is very likely because of the scale/resolution 
   # of GEFS 0.25deg modeled and this is a topographically-complex area which will
   # affect transferability.
-    
+  
   ## SMR temperature ----
   
   # download the data using the ts_id/timeseries info, separate for temperature
@@ -100,7 +132,8 @@ covariates_temp <- list(
         end_date = "2024-11-01",
         datasource = 1) %>% 
         select(datetime, temp_degC = value) %>% 
-        mutate(temp_degC = as.numeric(temp_degC)) %>% 
+        mutate(temp_degC = as.numeric(temp_degC),
+               datetime = as_datetime(datetime, tz = "Etc/GMT+7")) %>% 
         filter(between(temp_degC, -5, 30))
       SMR_MID_sensor_depth <- get_kisters_ts_data(
         station = "18525",
@@ -110,7 +143,8 @@ covariates_temp <- list(
         end_date = "2024-11-01",
         datasource = 1) %>% 
         select(datetime, depth_m = value) %>% 
-        mutate(depth_m = as.numeric(depth_m)) %>% 
+        mutate(depth_m = as.numeric(depth_m),
+               datetime = as_datetime(datetime, tz = "Etc/GMT+7")) %>% 
         filter(depth_m <= 7.5) # QA measure
       full_join(SMR_MID_water_temp, 
                 SMR_MID_sensor_depth)
@@ -123,23 +157,23 @@ covariates_temp <- list(
     name = SMR_daily,
     command = {
       SMR_daily_near_surface <- SMR_MID_temp %>% 
-      filter(depth_m <= 1) %>% 
-      mutate(date = ymd(format(as.POSIXct(datetime, tz = "Etc/GMT+5"), "%Y-%m-%d"))) %>% 
-      summarize(mean_temp_ns = mean(temp_degC),
-                n = n(),
-                .by = date) %>% 
-      filter(n >= 5) # make sure obs are complete (or nearly), measurement occurs 
-    #every ~4h and there is generally only one measurement < 1m per measurement
+        filter(depth_m <= 1) %>% 
+        mutate(date = as_date(datetime)) %>% 
+        summarize(mean_temp_ns = mean(temp_degC),
+                  n = n(),
+                  .by = date) %>% 
+        filter(n >= 5) # make sure obs are complete (or nearly), measurement occurs 
+      #every ~4h and there is generally only one measurement < 1m per measurement
       SMR_daily_integrated <- SMR_MID_temp %>% 
         filter(depth_m <= 5) %>% 
-        mutate(date = ymd(format(as.POSIXct(datetime, tz = "Etc/GMT+5"), "%Y-%m-%d"))) %>% 
+        mutate(date = as_date(datetime)) %>% 
         summarize(mean_temp_int = mean(temp_degC),
                   .by = date) 
       left_join(SMR_daily_near_surface, SMR_daily_integrated) %>% 
         select(-n)
     }
   ),
-
+  
   # save for use in Shiny
   tar_target(
     name = save_SMR_daily,
