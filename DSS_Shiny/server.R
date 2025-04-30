@@ -214,8 +214,8 @@ server <- function(input, output, session) {
   output$prevMetFigure <- renderPlot({
     req(filtered_forecast_data())
     met <- filtered_forecast_data()$prev7 %>% 
-      select(date, SMR_max_temp_degC:SMR_mean_wind_mps) %>% 
-      pivot_longer(cols = c(SMR_max_temp_degC:SMR_mean_wind_mps),
+      select(date, max_temp_degC:mean_wind_mps) %>% 
+      pivot_longer(cols = !date,
                    names_to = "parameter",
                    values_to = "value") %>% 
       mutate(unit = case_when(grepl("degC", parameter) ~ "Air Temperature (deg C)",
