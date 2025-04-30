@@ -219,7 +219,7 @@ server <- function(input, output, session) {
                    names_to = "parameter",
                    values_to = "value") %>% 
       mutate(unit = case_when(grepl("degC", parameter) ~ "Air Temperature (deg C)",
-                              grepl("mm", parameter) ~ "Total Precipitation (mm)",
+                              grepl("perc", parameter) ~ "Percent Relative Humidity",
                               grepl("Wpm2", parameter) ~ "Total Solar Radiation (W/m^2)",
                               grepl("mps", parameter) ~ "Wind (m/s)",
                               .default = NA_character_),
