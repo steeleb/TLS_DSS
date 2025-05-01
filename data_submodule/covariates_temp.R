@@ -69,7 +69,7 @@ covariates_temp <- list(
                                 .))) %>% 
         pivot_longer(cols = !datetime,
                      names_to = "parameter",
-                     values_to = "value", )
+                     values_to = "value")
     }
   ),
   
