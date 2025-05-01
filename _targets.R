@@ -12,8 +12,10 @@ tar_option_set(
 
 # Source the upstream {target} groups
 tar_source(files = c(
-  "data_submodule/inflow_balance.R"
+  "data_submodule/inflow_balance.R",  
+  "data_submodule/covariates_temp.R"
 ))
 
 # Full {targets} list (from above files)
-c(inflow_water_balance)
+c(inflow_water_balance,
+  covariates_temp)
