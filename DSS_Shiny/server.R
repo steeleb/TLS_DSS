@@ -63,11 +63,9 @@ server <- function(input, output, session) {
       cat(names(col_info)[i], ": ", paste(col_info[[i]], collapse = ", "), "\n")
     }
     
-    # Print summary if not too large
-    if (ncol(current_data()) <= 10) {
-      cat("\nSummary Statistics:\n")
-      print(summary(current_data()))
-    }
+    # Print summary
+    cat("\nSummary Statistics:\n")
+    print(summary(current_data()))
   })
   
   # DIALOG SUBMODULE ----
