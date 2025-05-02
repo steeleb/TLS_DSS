@@ -98,23 +98,23 @@ server <- function(input, output, session) {
     
     forecast_date <- as_date(parse_date_time(input$selectedDate, "%A %B %d, %Y"))
     
-    # get 7 days before (not including 'forecast day', aka the day we want 
+    # get prev 30 days (not including 'forecast day', aka the day we want 
     # to predict)
-    prev7 <- all_data %>%
-      filter(between(date, forecast_date - days(7), forecast_date - days(1))) %>% 
+    prev_data <- all_data %>%
+      filter(date < forecast_date & date > forecast_date - days(30)) %>% 
       mutate(across(where(is.numeric), ~round(., digits = 2)))
     
     met_fore <- met %>% 
       filter(between(date, forecast_date, forecast_date + days(6))) %>% 
       mutate(across(where(is.numeric), ~round(., digits = 2)))
     
-    list(prev7 = prev7, met_fore = met_fore)
+    list(prev_data = prev_data, met_fore = met_fore)
   })
   
   # add prev and forecast tables to output
   output$prevDataTable <- renderDataTable({
     req(filtered_forecast_data())
-    datatable(filtered_forecast_data()$prev7, 
+    datatable(filtered_forecast_data()$prev_data, 
               options = list(pageLength = 7))
   })
   
@@ -127,7 +127,7 @@ server <- function(input, output, session) {
   ## Create figures ----
   output$prevTempFigure <- renderPlot({
     req(filtered_forecast_data())
-    temp <- filtered_forecast_data()$prev7 %>% 
+    temp <- filtered_forecast_data()$prev_data %>% 
       select(date, mean_temp_ns, mean_temp_int) %>% 
       pivot_longer(cols = c(mean_temp_ns, mean_temp_int),
                    names_to = "parameter",
@@ -149,7 +149,7 @@ server <- function(input, output, session) {
   
   output$prevFlowFigure <- renderPlot({
     req(filtered_forecast_data())
-    flow <- filtered_forecast_data()$prev7 %>% 
+    flow <- filtered_forecast_data()$prev_data %>% 
       select(date, northfork_cfs:SMR_elev_ft) %>% 
       pivot_longer(cols = c(northfork_cfs:SMR_elev_ft),
                    names_to = "parameter",
@@ -181,7 +181,7 @@ server <- function(input, output, session) {
   
   output$prevFlowAggregated <- renderPlot({
     req(filtered_forecast_data())
-    flow_agg <- filtered_forecast_data()$prev7 %>% 
+    flow_agg <- filtered_forecast_data()$prev_data %>% 
       select(date, northfork_cfs:adams_cfs) %>% 
       pivot_longer(cols = c(northfork_cfs:adams_cfs),
                    names_to = "parameter",
@@ -205,13 +205,16 @@ server <- function(input, output, session) {
       facet_grid(type ~ ., scales = "free_y", 
                  labeller = label_wrap_gen(10)) +
       theme_bw() +
-      scale_x_date(date_labels = "%a %b %d", date_breaks = "1 day") +
+      scale_x_date(breaks = seq(min(flow_agg$date), max(flow_agg$date), by = "7 days"),
+                   labels = function(x) if_else(x %in% seq(min(flow_agg$date), max(flow_agg$date), by = "7 days"),
+                                                format(x, "%a, %b %d"),
+                                                "")) +
       ROSS_theme
   }, res = 100)
   
   output$prevMetFigure <- renderPlot({
     req(filtered_forecast_data())
-    met <- filtered_forecast_data()$prev7 %>% 
+    met <- filtered_forecast_data()$prev_data %>% 
       select(date, max_temp_degC:mean_wind_mps) %>% 
       pivot_longer(cols = !date,
                    names_to = "parameter",

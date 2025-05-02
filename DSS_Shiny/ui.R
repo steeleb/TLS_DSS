@@ -56,25 +56,25 @@ ui <- page_navbar(
         ),
         navset_card_tab(  # Use this to switch between tabs
           nav_panel(
-            title = "Previous 7 Days Water Temperature",
+            title = "Previous 30 Days Water Temperature",
             card(
               plotOutput("prevTempFigure", height = "400px")
             )
           ),
           nav_panel(
-            title = "Previous 7 Days Flow",
+            title = "Previous 30 Days Flow",
             card(
               plotOutput("prevFlowFigure", height = "1200px")
             )
           ),
           nav_panel(
-            title = "Previous 7 Days Flow, Aggregated Inflow/Outflow/Balance",
+            title = "Previous 30 Days Flow, Aggregated Inflow/Outflow/Balance",
             card(
               plotOutput("prevFlowAggregated", height = "900px")
             )
           ),
           nav_panel(
-            title = "Previous 7 Days Met",
+            title = "Previous 30 Days Met",
             card(
               plotOutput("prevMetFigure", height = "900px")
             )
@@ -83,7 +83,7 @@ ui <- page_navbar(
             title = "Data Tables",
             div(  # wrap the content directly here
               card(
-                card_header("Observed Data (Previous 7 Days)"),
+                card_header("Observed Data (Previous 30 Days)"),
                 dataTableOutput("prevDataTable")
               ),
               card(
