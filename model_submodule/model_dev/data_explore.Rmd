@@ -7,6 +7,7 @@ editor_options:
 
 ```{r}
 library(tidyverse)
+library(imputeTS)
 ```
 
 # Purpose
@@ -26,13 +27,15 @@ model development and application.
 -   Feature reduction: the act of reducing features to remove redundancy and
     decrease the tendency towards overtraining of the NN
 -   Normalization/standardization: When using a NN it is imperative to have
-    values for the features and targets that are small (as in between -1 to 1).
-    While this is not always, it does help the model converge and can reduce
+    values for the features and targets that are small (as in between -1 to 1,
+    or z-score standardization using the mean and standard deviation). While
+    this is not always necessary, it does help the model converge and can reduce
     over-reliance on large values/features with large ranges in prediction.
 
 # Buoy Data
 
-Quick visualization of the buoy data that will become our target variable:
+Quick visualization of the 10 years of buoy data that will become our target
+variable:
 
 ```{r}
 buoy <- read_csv("model_submodule/model_dev/data/SMR_buoy_daily_summary.csv")
@@ -71,4 +74,422 @@ hist(target$mean_1m_temp_degC)
 hist(target$mean_0_5m_temp_degC)
 ```
 
+And these data will need to be standardized for use in the NN, we'll use a
+z-score for these values.
+
+**z = (x-μ)/σ**
+
+```{r}
+standardize_function <- function(values_to_be_standardized) {
+  mean_value <- mean(values_to_be_standardized, na.rm = T)
+  sd_value <- sd(values_to_be_standardized, na.rm = T)
+  standardized_values <- (values_to_be_standardized - mean_value)/sd_value
+  # and we'll return mean, sd, and the standardized values, naming them for
+  # easier use later
+  list("mean" = mean_value, "sd" = sd_value, "values" = standardized_values)
+}
+
+# calculate z scores
+z_1m <- standardize_function(target$mean_1m_temp_degC)
+z_int <- standardize_function(target$mean_0_5m_temp_degC)
+
+target <- target %>% 
+  mutate(z_1m = z_1m$values,
+         z_int = z_int$values) %>% 
+  select(-c(mean_1m_temp_degC, mean_0_5m_temp_degC))
+```
+
 # Weather Data
+
+These data have been processed to "look like" the NOAA GEFS forecast data. We'll
+summarize these as we will the GEFS data so that we have equivalent data between
+the two sources. We know that surface water temperature will be driven by air
+temperature and solar radiation, and that wind contributes to mixing within the
+waterbody when it's not strongly stratified (and can generally affect the
+strength of stratification otherwise) and that periods of high temperature and
+low wind are times when algal biomass proliferate.
+
+```{r}
+met <- read_csv("model_submodule/model_dev/data/SMR_met_three_hour_summary.csv") %>% 
+  arrange(date, fcast)
+
+met_summary <- met %>% 
+  # don't use na.rm = T here, because we want complete 3-h "forecasts" only
+  summarize(mean_air_temp = mean(air_temp),
+            max_air_temp = max(air_temp),
+            min_air_temp = min(air_temp), 
+            mean_wind = mean(ave_wind),
+            max_wind = max(ave_wind),
+            min_wind = min(ave_wind),
+            mean_rel_hum = mean(rel_hum),
+            max_rel_hum = max(rel_hum),
+            total_solar_radiation = sum(solar_rad),
+            .by = date) 
+
+met_summary %>% 
+  pivot_longer(cols = mean_air_temp:total_solar_radiation)  %>% 
+  mutate(parameter_group = case_when(grepl("temp", name) ~ "Air Temperature",
+                                     grepl("wind", name) ~ "Wind Speed",
+                                     name == "total_solar_radiation" ~ "Total Solar Radiation",
+         grepl("hum", name) ~ "Relative Humidity")) %>% 
+  ggplot(., aes(x = date, y = value)) +
+  geom_point() +
+  facet_grid(parameter_group ~ ., scales = "free_y") +
+  theme_bw()
+
+```
+
+Okay, some data gaps in temperature 2019-2020 that appear to be due to missing
+data twice per day. It's probably safe to say we can impute those linearly
+between neighboring three-hour periods. This is not a perfect method, but it
+might help us retain some data from the record that would otherwise be lost.
+
+```{r}
+# look at where the missing data is using {imputeTS}
+met %>% 
+  pull(air_temp) %>% 
+  ggplot_na_distribution(.)
+
+met %>% 
+  pull(ave_wind) %>% 
+  ggplot_na_distribution(.)
+
+met %>% 
+  pull(rel_hum) %>% 
+  ggplot_na_distribution()
+
+met %>% 
+  pull(solar_rad) %>% 
+  ggplot_na_distribution(.)
+
+```
+
+Looks like we can just do this for temp, relative humidity, and solar radiation.
+Temperature first.
+
+```{r}
+# now we'll impute using a simple spline regression imputation technique using {imputeTS}
+interp_linear <- met %>% arrange(date, fcast) %>% pull(air_temp) %>% na_interpolation(option = "linear", maxgap = 2)
+interp_spline <- met %>% arrange(date, fcast) %>% pull(air_temp) %>% na_interpolation(option = "spline", maxgap = 2)
+
+met$temp_linear <- interp_linear
+met$temp_spline <- interp_spline
+
+met %>% 
+  filter(between(year(date), 2019, 2020)) %>% 
+  ggplot(., aes(x = date, y = air_temp)) +
+  geom_point() +
+  geom_point(aes(y = temp_linear), color = "orange") +
+  geom_point(aes(y = temp_spline), color = "green") +
+  theme_bw()
+
+met %>% 
+  filter(between(date, ymd("2020-06-01"), ymd("2020-06-15"))) %>% 
+  mutate(datetime = case_when(fcast == "f000" ~ ymd_hm(paste(date, "00:00")),
+                              fcast == "f003" ~ ymd_hm(paste(date, "03:00")),
+                              fcast == "f006" ~ ymd_hm(paste(date, "06:00")),
+                              fcast == "f009" ~ ymd_hm(paste(date, "09:00")),
+                              fcast == "f012" ~ ymd_hm(paste(date, "12:00")),
+                              fcast == "f015" ~ ymd_hm(paste(date, "15:00")),
+                              fcast == "f018" ~ ymd_hm(paste(date, "18:00")),
+                              fcast == "f021" ~ ymd_hm(paste(date, "21:00")))) %>% 
+  ggplot(., aes(x = datetime, y = air_temp)) +
+  geom_point() +
+  geom_line(aes(y = temp_linear), color = "orange") +
+  geom_line(aes(y = temp_spline), color = "green") +
+  theme_bw()
+```
+
+Spline looks better here, so let's go with that. I assume that will be the case
+for solar radiation and relative humidity, too, since it's a diurnal pattern, so
+just go ahead and apply to the dataset since there are pretty few instances of
+missing data.
+
+```{r}
+met$rad_spline <- met %>% arrange(date, fcast) %>% pull(solar_rad) %>% na_interpolation(option = "spline", maxgap = 2)
+met$hum_spline <- met %>% arrange(date, fcast) %>% pull(rel_hum) %>% na_interpolation(option = "spline", maxgap = 2)
+```
+
+And now summarize and re-plot.
+
+```{r}
+met_summary <- met %>% 
+  # don't use na.rm = T here, because we want complete 3-h "forecasts" only
+  summarize(mean_air_temp = mean(temp_spline),
+            max_air_temp = max(temp_spline),
+            min_air_temp = min(temp_spline), 
+            mean_wind = mean(ave_wind),
+            max_wind = max(ave_wind),
+            min_wind = min(ave_wind),
+            mean_rel_hum = mean(hum_spline),
+            max_rel_hum = max(hum_spline),
+            total_solar_radiation = sum(rad_spline),
+            .by = date) 
+
+met_summary %>% 
+  pivot_longer(cols = mean_air_temp:total_solar_radiation)  %>% 
+  mutate(parameter_group = case_when(grepl("temp", name) ~ "Air Temperature",
+                                     grepl("wind", name) ~ "Wind Speed",
+                                     name == "total_solar_radiation" ~ "Total Solar Radiation",
+                                     grepl("hum", name) ~ "Relative Humidity")) %>% 
+  ggplot(., aes(x = date, y = value)) +
+  geom_point() +
+  facet_grid(parameter_group ~ ., scales = "free_y") +
+  theme_bw()
+```
+
+Just a small gap in temp in early 2020, which shouldn't affect our ability to
+implement the NN.
+
+And now, we'll do some quick correlations and determine if we'll keep all the
+summary values
+
+```{r}
+plot(met_summary)
+cor(met_summary$mean_air_temp, met_summary$max_air_temp, use = "complete.obs")
+cor(met_summary$mean_air_temp, met_summary$min_air_temp, use = "complete.obs")
+cor(met_summary$max_air_temp, met_summary$min_air_temp, use = "complete.obs")
+```
+
+Ridiculously strong relationship between mean/max air temp, but we know that
+both of these parameters actually can "tell us" about what is happening. For the
+purposes of this model, we are not going to remove any variables at this time.
+And now we can standardize these, but we don't need all the data, just data
+generally the data around the buoy deployment.
+
+```{r}
+buoy %>% 
+  mutate(yr = year(date)) %>% 
+  summarize(min_date = min(date), 
+            max_date = max(date), 
+            .by = yr)
+```
+
+Let's filter for May 1 through end of Oct 31.
+
+```{r}
+met_reduced <- met_summary %>% 
+  mutate(month = month(date)) %>% 
+  filter(between(month, 5, 10)) %>% 
+  select(-month)
+```
+
+And now we can standardize across the parameters we care about and create a new
+dataframe with that data.
+
+```{r}
+params <- names(met_reduced)[!grepl("date", names(met_reduced))]
+param_list <- map(.x = params, .f = ~ met_reduced %>% pull(!!.x)) 
+names(param_list) <- params
+met_z <- map(.x = param_list, .f = ~standardize_function(.x))
+
+# and grab the info we want to store
+met_z_values <- map(.x = met_z, .f = ~ .x$values) %>% 
+  bind_cols() %>% 
+  mutate(date = met_reduced$date) %>% 
+  relocate(date)
+```
+
+# Flow Data
+
+And now we'll look at the flow data.
+
+```{r}
+flow <- read_csv("model_submodule/model_dev/data/flow_daily.csv") %>% 
+  filter(year(date) < 2024)
+
+flow %>%
+  pivot_longer(cols = pump_cfs:chipmunk_cfs) %>% 
+  ggplot(., aes(x = date, y = value)) +
+  geom_point() +
+  facet_grid(name ~ ., scales = "free_y") +
+  theme_bw()
+```
+
+And let's look at data gaps
+
+```{r}
+# look at where the missing data is using {imputeTS}
+flow %>% 
+  pull(pump_cfs) %>% 
+  ggplot_na_distribution(.)
+
+flow %>% 
+  pull(nf_cfs) %>% 
+  ggplot_na_distribution(.)
+
+flow %>% 
+  pull(ni_cfs) %>% 
+  ggplot_na_distribution(.)
+
+flow %>% 
+  pull(adams_cfs) %>% 
+  ggplot_na_distribution(.)
+
+flow %>% 
+  pull(chipmunk_cfs) %>% 
+  ggplot_na_distribution(.)
+
+```
+
+A lot of the missing values are over the winter, which is totally okay. For
+these, I think we should do a linear interpolation to fill in the short \< 2 day
+gaps.
+
+```{r}
+flow_interp <- flow %>% 
+  mutate(across(.cols = pump_cfs:chipmunk_cfs,
+                .fns = ~ na_interpolation(., option = "linear", maxgap = 2)))
+
+# look at where the missing data is using {imputeTS}
+flow_interp %>% 
+  pull(pump_cfs) %>% 
+  ggplot_na_distribution(.)
+
+flow_interp %>% 
+  pull(nf_cfs) %>% 
+  ggplot_na_distribution(.)
+
+flow_interp %>% 
+  pull(ni_cfs) %>% 
+  ggplot_na_distribution(.)
+
+flow_interp %>% 
+  pull(adams_cfs) %>% 
+  ggplot_na_distribution(.)
+
+flow_interp %>% 
+  pull(chipmunk_cfs) %>% 
+  ggplot_na_distribution(.)
+```
+
+Great. Let's do a quick correlation plot.
+
+```{r}
+plot(flow_interp)
+cor(flow_interp$ei_cfs, flow_interp$ni_cfs, use = "complete.obs")
+```
+
+Pretty high correlation between East and North inlet to Grand, and Chipmunk kind
+of tells the tale otherwise. To reduce the need for excessive water balance
+calculations/applications, we will drop EI, NI and Adams for modeling purposes
+since most of that data is embedded in the Chipmunk flow data. We'll also filter
+out data for the same time period as the met data.
+
+```{r}
+flow_reduced <- flow_interp %>%
+  select(-c(ni_cfs, ei_cfs, adams_cfs)) %>% 
+  mutate(month = month(date)) %>% 
+  filter(between(month, 5, 10)) %>% 
+  select(-month)
+```
+
+And now to standardize.
+
+```{r}
+params <- names(flow_reduced)[!grepl("date", names(flow_reduced))]
+param_list <- map(.x = params, .f = ~ flow_reduced %>% pull(!!.x)) 
+names(param_list) <- params
+flow_z <- map(.x = param_list, .f = ~standardize_function(.x))
+
+# and grab the info we want to store
+flow_z_values <- map(.x = flow_z, .f = ~ .x$values) %>% 
+  bind_cols() %>% 
+  mutate(date = flow_reduced$date) %>% 
+  relocate(date)
+```
+
+# Collate and add previous days
+
+Now, we'll bring everything together. For the most part this is pretty
+straightforward - we want all of our data in a single row to play nice as a
+table. We want tomorrows temperature as the target, but are parameter will all
+be previous day's observations/measurements except met, which we can provide
+tomorrow's data as well (this is the equivalent of NOAA GEFS data).
+
+## Create parameters of previous days
+
+We are using an autoregressive neural network for this application, meaning we
+will give the model yesterday (and a few previous day's temperature. For the
+most part, a good model within aquatic science is that which performs better
+than persistence ("yesterday-is-today"), so we're going to embed that into the
+model. For the purposes of this model, we're going to provide the previous 3
+days of water temperature. A super simple and quick way to do this is to adjust
+the 'date' column and join together.
+
+```{r}
+params <- names(target)[!grepl("date", names(target))]
+
+temp_m1_3 <- map(.x = 1:3, function(i) {
+  target %>%
+    mutate(date = date + days(i)) %>%
+    rename_with(.cols = params,
+                .fn = ~ paste0(.x, "_m", i))
+  }) %>% 
+  reduce(., full_join)
+
+ar_temp <- full_join(target, temp_m1_3)
+```
+
+Now for met. Similar idea here, but we're going to embed a bit more air
+temperature memory (10d), since that has a seasonal signal.
+
+```{r}
+params <- names(met_z_values)[!grepl("date", names(met_z_values))]
+
+met_m1_3 <- map(.x = 1:3, function(i) {
+  met_z_values %>%
+    mutate(date = date + days(i)) %>%
+    rename_with(.cols = params,
+                .fn = ~ paste0(.x, "_m", i))
+  }) %>% 
+  reduce(., full_join)
+
+air_temp_m4_7 <- met_z_values %>% 
+  select(date, contains("air_temp"))
+air_temp_m4_7 <- map(.x = 4:7, function(i) {
+  air_temp_m4_7 %>%
+    mutate(date = date + days(i)) %>%
+    rename_with(.cols = contains("air_temp"),
+                .fn = ~ paste0(.x, "_m", i))
+  }) %>% 
+  reduce(., full_join)
+
+# join "tomorrow's" met with previoius day summaries.
+ar_met <- reduce(list(met_z_values, met_m1_3, air_temp_m4_7),
+                 full_join)
+```
+
+And now flow data. We're going to do previous 7 here. But we also want to use
+operational pumping of "tomorrow" as a parameter.
+
+```{r}
+params <- names(flow_z_values)[!grepl("date", names(flow_z_values))]
+
+flow_m1_7 <- map(.x = 1:7, function(i) {
+  flow_z_values %>%
+    mutate(date = date + days(i)) %>%
+    rename_with(.cols = params,
+                .fn = ~ paste0(.x, "_m", i))
+  }) %>% 
+  reduce(., full_join)
+
+ar_flow <- flow_z_values %>% 
+  select(date, pump_cfs) %>% 
+  full_join(., flow_m1_7)
+```
+
+## Collate all, reduce to complete observations.
+
+```{r}
+ar_data <- reduce(list(ar_temp, ar_met, ar_flow),
+                  full_join)
+```
+
+And there we go! There are a lot of variables in here right now, but we'll worry
+about that later, when we create a final model, where we'll use just a
+proportion of these that are consistently meaningful across all ensemble models.
+
+```{r}
+write_csv(ar_data, "model_submodule/model_dev/data/ar_data.csv")
+```
