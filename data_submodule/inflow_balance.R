@@ -186,17 +186,33 @@ inflow_water_balance <- list(
   
   ## Adams Tunnel Delivery (NW) ----
   
+  # THIS IS THE TS THAT BECCA PROVIDED, BUT I DON'T THINK THIS IS THE ONE WE WANT.
+  # tar_target(
+  #   name = daily_adams_data,
+  #   command = get_kisters_ts_data(station = "EX-0182",
+  #                                 ts_id = "33644010",
+  #                                 param = "Q",
+  #                                 start_date = "2024-04-01",
+  #                                 end_date = "2024-11-01",
+  #                                 datasource = 1)%>%
+  #     filter(!is.na(datetime)) %>%
+  #     mutate(date = ymd(as.POSIXct(datetime, tz = "Etc/GMT+7")),
+  #            value = as.numeric(value)) %>%
+  #     select(date, value),
+  #   packages = c("tidyverse", "httr2", "rvest")
+  # ),
+  
   tar_target(
     name = daily_adams_data,
-    command = get_kisters_ts_data(station = "EX-0182",
-                                  ts_id = "33644010",
+    command = get_kisters_ts_data(station = "EX-0047",
+                                  ts_id = "32892010",
                                   param = "Q",
-                                  start_date = "2024-04-01", 
+                                  start_date = "2024-04-01",
                                   end_date = "2024-11-01",
-                                  datasource = 1)%>% 
-      filter(!is.na(datetime)) %>% 
+                                  datasource = 1)%>%
+      filter(!is.na(datetime)) %>%
       mutate(date = ymd(as.POSIXct(datetime, tz = "Etc/GMT+7")),
-             value = as.numeric(value)) %>% 
+             value = as.numeric(value)) %>%
       select(date, value),
     packages = c("tidyverse", "httr2", "rvest")
   ),
