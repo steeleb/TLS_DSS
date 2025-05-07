@@ -18,19 +18,19 @@ and/or standardization to features and targets prior to neural network (NN)
 model development and application.
 
 -   Feature: any variable used as an input to a model, sometimes used
-    interchangeably with variable or parameter, but specifically refers to the
-    inputs of a machine learning model
+interchangeably with variable or parameter, but specifically refers to the
+inputs of a machine learning model
 -   Target: the variable predicted by a model, sometimes called output
 -   Feature creation: the act of aggregating existing variables into a feature
-    that could be used for modeling; e.g. creating a daily mean from 3-h data,
-    creating categorical variables/features from zero-inflated variables
+that could be used for modeling; e.g. creating a daily mean from 3-h data,
+creating categorical variables/features from zero-inflated variables
 -   Feature reduction: the act of reducing features to remove redundancy and
-    decrease the tendency towards overtraining of the NN
+decrease the tendency towards overtraining of the NN
 -   Normalization/standardization: When using a NN it is imperative to have
-    values for the features and targets that are small (as in between -1 to 1,
-    or z-score standardization using the mean and standard deviation). While
-    this is not always necessary, it does help the model converge and can reduce
-    over-reliance on large values/features with large ranges in prediction.
+values for the features and targets that are small (as in between -1 to 1,
+or z-score standardization using the mean and standard deviation). While
+this is not always necessary, it does help the model converge and can reduce
+over-reliance on large values/features with large ranges in prediction.
 
 # Buoy Data
 
@@ -90,13 +90,16 @@ standardize_function <- function(values_to_be_standardized) {
 }
 
 # calculate z scores
-z_1m <- standardize_function(target$mean_1m_temp_degC)
-z_int <- standardize_function(target$mean_0_5m_temp_degC)
+params <- names(target)[!grepl("date", names(target))]
+param_list <- map(.x = params, .f = ~ target %>% pull(!!.x)) 
+names(param_list) <- params
+temp_z <- map(.x = param_list, .f = ~standardize_function(.x))
 
-target <- target %>% 
-  mutate(z_1m = z_1m$values,
-         z_int = z_int$values) %>% 
-  select(-c(mean_1m_temp_degC, mean_0_5m_temp_degC))
+# and grab the info we want to store
+temp_z_values <- map(.x = temp_z, .f = ~ .x$values) %>% 
+  bind_cols() %>% 
+  mutate(date = target$date) %>% 
+  relocate(date)
 ```
 
 # Weather Data
@@ -131,7 +134,7 @@ met_summary %>%
   mutate(parameter_group = case_when(grepl("temp", name) ~ "Air Temperature",
                                      grepl("wind", name) ~ "Wind Speed",
                                      name == "total_solar_radiation" ~ "Total Solar Radiation",
-         grepl("hum", name) ~ "Relative Humidity")) %>% 
+                                     grepl("hum", name) ~ "Relative Humidity")) %>% 
   ggplot(., aes(x = date, y = value)) +
   geom_point() +
   facet_grid(parameter_group ~ ., scales = "free_y") +
@@ -418,17 +421,17 @@ days of water temperature. A super simple and quick way to do this is to adjust
 the 'date' column and join together.
 
 ```{r}
-params <- names(target)[!grepl("date", names(target))]
+params <- names(temp_z_values)[!grepl("date", names(temp_z_values))]
 
 temp_m1_3 <- map(.x = 1:3, function(i) {
-  target %>%
+  temp_z_values %>%
     mutate(date = date + days(i)) %>%
     rename_with(.cols = params,
                 .fn = ~ paste0(.x, "_m", i))
-  }) %>% 
+}) %>% 
   reduce(., full_join)
 
-ar_temp <- full_join(target, temp_m1_3)
+ar_temp <- full_join(temp_z_values, temp_m1_3)
 ```
 
 Now for met. Similar idea here, but we're going to embed a bit more air
@@ -442,7 +445,7 @@ met_m1_3 <- map(.x = 1:3, function(i) {
     mutate(date = date + days(i)) %>%
     rename_with(.cols = params,
                 .fn = ~ paste0(.x, "_m", i))
-  }) %>% 
+}) %>% 
   reduce(., full_join)
 
 air_temp_m4_7 <- met_z_values %>% 
@@ -452,7 +455,7 @@ air_temp_m4_7 <- map(.x = 4:7, function(i) {
     mutate(date = date + days(i)) %>%
     rename_with(.cols = contains("air_temp"),
                 .fn = ~ paste0(.x, "_m", i))
-  }) %>% 
+}) %>% 
   reduce(., full_join)
 
 # join "tomorrow's" met with previoius day summaries.
@@ -471,7 +474,7 @@ flow_m1_7 <- map(.x = 1:7, function(i) {
     mutate(date = date + days(i)) %>%
     rename_with(.cols = params,
                 .fn = ~ paste0(.x, "_m", i))
-  }) %>% 
+}) %>% 
   reduce(., full_join)
 
 ar_flow <- flow_z_values %>% 
@@ -493,3 +496,31 @@ proportion of these that are consistently meaningful across all ensemble models.
 ```{r}
 write_csv(ar_data, "model_submodule/model_dev/data/ar_data.csv")
 ```
+
+And we need the mean and standard deviations for future use, too - so we'll compile
+and save.
+
+```{r}
+mean_z <- map(list(temp_z, flow_z, met_z),
+              function(z_list) {
+                map(z_list,
+                    \(z) z$mean) %>% 
+                  bind_cols() %>% 
+                  pivot_longer(cols = everything(), names_to = "parameter", values_to = "mean")
+              }) %>% 
+  bind_rows()
+
+sd_z <- map(list(temp_z, flow_z, met_z),
+              function(z_list) {
+                map(z_list,
+                    \(z) z$sd) %>% 
+                  bind_cols() %>% 
+                  pivot_longer(cols = everything(), names_to = "parameter", values_to = "sd")
+              }) %>% 
+  bind_rows()
+
+mu_sigma <- full_join(mean_z, sd_z)
+write_csv(mu_sigma, "model_submodule/model_dev/data/mu_sigma.csv")
+
+```
+

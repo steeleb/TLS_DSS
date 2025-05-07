@@ -1,0 +1,58 @@
+---
+title: "Train Validate Test Split"
+---
+
+Here, we're just creating splits across the years to create an ensemble of models.
+
+```{r}
+library(tidyverse)
+ar_data <- read_csv("model_submodule/model_dev/data/ar_data.csv")
+
+# get list of unique years
+years <- unique(year(ar_data$date))
+
+```
+
+We're going to randomly choose 2 years for the test set, and then randomly pair
+the remaining years for validation sets (and those not in the list are the training), 
+resulting in 4 datasets to create models that will be the ensemble.
+
+```{r}
+set.seed(47)
+
+test <- sample(years, size = 2, replace = F)
+
+val_1 <- sample(years[!years %in% test], size = 2, replace = F)
+val_2 <- sample(years[!years %in% c(test, val_1)], size = 2, replace = F)
+val_3 <- sample(years[!years %in% c(test, val_1, val_2)], size = 2, replace = F)
+val_4 <- years[!years %in% c(test, val_1, val_2, val_3)]
+```
+
+And now, make a list of the training sets and save files
+
+```{r}
+test_data <- ar_data %>% 
+  filter(year(date) %in% test)
+write_csv(test_data, 
+          paste0("model_submodule/model_dev/baseline_model/data/test.csv"))
+
+
+walk2(.x =  list(val_1, val_2, val_3, val_4),
+      .y = list("_1", "_2", "_3", "_4"),
+     .f = ~ {
+       val_data <- ar_data %>% 
+         filter(year(date) %in% .x)
+       write_csv(val_data, 
+                 paste0("model_submodule/model_dev/baseline_model/data/validation",
+                        .y,
+                        ".csv"))
+       train_data <- reduce(list(ar_data, test_data, val_data),
+                            anti_join)
+       write_csv(train_data, 
+                 paste0("model_submodule/model_dev/baseline_model/data/training",
+                        .y,
+                        ".csv"))
+     })
+
+```
+

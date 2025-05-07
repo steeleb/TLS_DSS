@@ -8,3 +8,6 @@ _targets/
 
 ## rsconnect folder
 DSS_Shiny/rsconnect/*
+
+## model data folders
+model_submodule/model_dev/baseline_model/data/*
