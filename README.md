@@ -97,3 +97,20 @@ Manual update can be triggered at the console using the following command:
 ```
 rsconnect::deployApp("DSS_Shiny/", account = "geocentroid", appName = "TLS-DSS")
 ```
+
+## Python modeling virtual environment
+
+conda create --name env_TLS_DSS python=3.10.10
+conda activate env_TLS_DSS
+conda install -c apple -c conda-forge -c nodefaults tensorflow-deps
+conda install tensorflow
+python -m pip install tensorflow-macos==2.10.0
+python -m pip install tensorflow-metal==0.6.0
+pip install tensorflow-probability==0.15 silence-tensorflow
+conda install numpy scipy matplotlib scikit-learn jupyterlab
+pip install pandas statsmodels icecream palettable seaborn progressbar2 tabulate isort
+pip install tqdm pydot graphviz
+pip install -U scikit-image
+pip install shap
+conda install pandas
+pip install chardet

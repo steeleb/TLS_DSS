@@ -11,3 +11,9 @@ DSS_Shiny/rsconnect/*
 
 ## model data folders
 model_submodule/model_dev/baseline_model/data/*
+model_submodule/model_dev/baseline_model/dump/*
+model_submodule/model_dev/operational_model/data/*
+model_submodule/model_dev/operational_model/dump/*
+
+## pycache folders (from imp module)
+**/__pycache__/*

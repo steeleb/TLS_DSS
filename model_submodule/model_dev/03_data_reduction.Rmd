@@ -1,0 +1,55 @@
+---
+title: "Data Reduction"
+---
+
+Based on the baseline model, we can probably drop some of the features we used
+for modeling. Here, we'll drop some of those that we consider redundant based
+on the SHAP plots.
+
+To keep:
+- water temp at both depths: m1
+- solar radiation: today, m1, m2
+- air temp: today mean/min/max, m1 mean/min/max
+- rel hum: mean m1, m2
+- pump: m1, m2, m3
+- wind: mean/max m1, today mean/max
+- nf: m1-m4
+- chip: m1-m4
+
+```{r}
+library(tidyverse)
+
+keep_vars <- c("date", "mean_1m_temp_degC", "mean_0_5m_temp_degC",
+               "mean_1m_temp_degC_m1", "mean_0_5m_temp_degC_m1",
+               "total_solar_radiation", "total_solar_radiation_m1", "total_solar_radiation_m2",
+               "mean_air_temp", "min_air_temp", "max_air_temp",
+               "mean_air_temp_m1", "min_air_temp_m1", "max_air_temp_m1",
+               "mean_rel_hum_m1", "mean_rel_hum_m2", 
+               "pump_cfs_m1", "pump_cfs_m2", "pump_cfs_m3",
+               "mean_wind", "max_wind", "mean_wind_m1", "max_wind_m1",
+               "nf_cfs_m1", "nf_cfs_m2", "nf_cfs_m3", "nf_cfs_m4",
+               "chipmunk_cfs_m1", "chipmunk_cfs_m2", "chipmunk_cfs_m3", "chipmunk_cfs_m4")
+
+ar_data <- read_csv("model_submodule/model_dev/data/ar_data.csv")
+
+ar_reduced <- ar_data %>% 
+  select(all_of(keep_vars))
+
+write_csv(ar_reduced, "model_submodule/model_dev/data/ar_reduced.csv")
+```
+
+Now, let's do this for all the TVT files, too.
+
+```{r}
+from_dir <- "model_submodule/model_dev/baseline_model/data/"
+to_dir <- "model_submodule/model_dev/operational_model/data/"
+baseline_tvt_files <- list.files(from_dir)
+
+walk(baseline_tvt_files,
+     function(f) {
+       read_csv(file.path(from_dir, f)) %>% 
+         select(all_of(keep_vars)) %>% 
+         write_csv(., file.path(to_dir, f))
+     })
+```
+
