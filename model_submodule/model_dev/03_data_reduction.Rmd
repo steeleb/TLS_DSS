@@ -4,7 +4,12 @@ title: "Data Reduction"
 
 Based on the baseline model, we can probably drop some of the features we used
 for modeling. Here, we'll drop some of those that we consider redundant based
-on the SHAP plots.
+on the SHAP plots. This script requires that 02 has been run and is still in the
+Global environment (it uses the test/val years created there.)
+
+```{r}
+if (!exists("test")) {"Run 02_tvt_split before continuing"}
+```
 
 To keep:
 - water temp at both depths: m1
@@ -17,8 +22,6 @@ To keep:
 - chip: m1-m4
 
 ```{r}
-library(tidyverse)
-
 keep_vars <- c("date", "mean_1m_temp_degC", "mean_0_5m_temp_degC",
                "mean_1m_temp_degC_m1", "mean_0_5m_temp_degC_m1",
                "total_solar_radiation", "total_solar_radiation_m1", "total_solar_radiation_m2",
@@ -41,15 +44,29 @@ write_csv(ar_reduced, "model_submodule/model_dev/data/ar_reduced.csv")
 Now, let's do this for all the TVT files, too.
 
 ```{r}
-from_dir <- "model_submodule/model_dev/baseline_model/data/"
-to_dir <- "model_submodule/model_dev/operational_model/data/"
-baseline_tvt_files <- list.files(from_dir)
+test_data <- ar_reduced %>% 
+  filter(year(date) %in% test, complete.cases(.))
+write_csv(test_data, 
+          paste0("model_submodule/model_dev/operational_model/data/test.csv"))
 
-walk(baseline_tvt_files,
-     function(f) {
-       read_csv(file.path(from_dir, f)) %>% 
-         select(all_of(keep_vars)) %>% 
-         write_csv(., file.path(to_dir, f))
+
+walk2(.x =  list(val_1, val_2, val_3, val_4),
+      .y = list("_1", "_2", "_3", "_4"),
+     .f = ~ {
+       val_data <- ar_reduced %>% 
+         filter(year(date) %in% .x, complete.cases(.))
+       write_csv(val_data, 
+                 paste0("model_submodule/model_dev/operational_model/data/validation",
+                        .y,
+                        ".csv"))
+       train_data <- reduce(list(ar_reduced, test_data, val_data),
+                            anti_join) %>% 
+         filter(complete.cases(.))
+       write_csv(train_data, 
+                 paste0("model_submodule/model_dev/operational_model/data/training",
+                        .y,
+                        ".csv"))
      })
 ```
+
 

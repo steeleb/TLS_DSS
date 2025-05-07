@@ -71,5 +71,17 @@ settings = {
     "dropout_rate": 0.1,
     "l1_reg": 0.0,
     "l2_reg": 0.0     
+  },
+    "five_fifteen_ten" : {
+    "hiddens": [15, 10, 10, 10, 15],
+    "activations": ["tanh", "tanh", "tanh", "tanh", "tanh"],
+    "learning_rate": 0.001,
+    "random_seed": 57,
+    "max_epochs": 2000,
+    "batch_size": 64,
+    "patience": 500,
+    "dropout_rate": 0.1,
+    "l1_reg": 0.0,
+    "l2_reg": 0.0     
   }
 }
