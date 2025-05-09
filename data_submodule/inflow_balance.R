@@ -439,6 +439,8 @@ inflow_water_balance <- list(
                                  rename(northinlet_cfs = value),
                                eastinlet_daily %>% 
                                  rename(eastinlet_cfs = value),
+                               chipmunk_data_daily %>% 
+                                 rename(chipmunk_cfs = value),
                                daily_pump_data %>% 
                                  rename(pump_cfs = value),
                                CR_SMR_out_daily %>% 

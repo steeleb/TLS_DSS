@@ -1,0 +1,141 @@
+---
+title: "Prep 2024 Data for NN application"
+editor_options: 
+  markdown: 
+    wrap: 80
+---
+
+```{r}
+library(tidyverse)
+
+# mean/sd from training/testing
+mu_sigma <- read_csv("model_submodule/model_dev/data/mu_sigma.csv")
+
+# 2024 data, just select the columps we nee.d
+flow <- read_csv("DSS_Shiny/www/water_balance.csv") %>% 
+  select(date, dow, nf_cfs = northfork_cfs, pump_cfs, chipmunk_cfs)
+met <- read_csv("DSS_Shiny/www/daily_met.csv") %>% 
+  select(date, 
+         max_air_temp = max_temp_degC, min_air_temp = min_temp_degC, mean_air_temp = mean_temp_degC, 
+         mean_rel_hum = mean_RH_perc, 
+         max_wind = max_wind_mps, mean_wind = mean_wind_mps,
+         total_solar_radiation = tot_sol_rad_Wpm2)
+temp <- read_csv("DSS_Shiny/www/daily_SMR_temp.csv") %>% 
+  rename(mean_1m_temp_degC = mean_temp_ns,
+         mean_0_5m_temp_degC = mean_temp_int)
+```
+
+Collate the data and apply mean/sd from training/validation
+
+```{r}
+data <- reduce(list(flow, met, temp), full_join)
+
+# Function to calculate z-score
+calc_z_score <- function(param, dataset){
+  m_s_param <- mu_sigma %>% 
+    filter(parameter == param) 
+  
+  m <- pull(m_s_param, mean)
+  s <- pull(m_s_param, sd)
+  
+  (dataset[[param]] - m) / s
+}
+
+# Identify columns to normalize
+cols_to_normalize <- names(data)[!grepl("date|dow", names(data))]
+
+# Apply z-score normalization
+for (param in cols_to_normalize) {
+  data[[param]] <- calc_z_score(param, data)
+}
+```
+
+Now make the lagged variables for tomorrow's data.
+
+```{r}
+ar_temp <- data %>% 
+  select(date, mean_1m_temp_degC, mean_0_5m_temp_degC) %>% 
+  mutate(date = date + days(1)) %>% 
+  rename_with(.cols = c(mean_1m_temp_degC, mean_0_5m_temp_degC),
+              .fn = ~ paste0(.x, "_m1"))
+
+ar_sol_rad <- map(.x = 1:2, function(i) {
+  data %>%
+    select(date, total_solar_radiation) %>% 
+    mutate(date = date + days(i)) %>%
+    rename_with(.cols = total_solar_radiation,
+                .fn = ~ paste0(.x, "_m", i))
+}) %>% 
+  reduce(., full_join)
+
+ar_air_temp <- data %>%
+  select(date, mean_air_temp, max_air_temp, min_air_temp) %>% 
+  mutate(date = date + days(1)) %>% 
+  rename_with(.cols = c(mean_air_temp, max_air_temp, min_air_temp),
+              .fn = ~ paste0(.x, "_m1"))
+
+ar_hum <- map(.x = 1:2, function(i) {
+  data %>%
+    select(date, mean_rel_hum) %>% 
+    mutate(date = date + days(i)) %>%
+    rename_with(.cols = mean_rel_hum,
+                .fn = ~ paste0(.x, "_m", i))
+}) %>% 
+  reduce(., full_join)
+
+ar_wind <- data %>%
+  select(date, mean_wind, max_wind) %>% 
+  mutate(date = date + days(1)) %>% 
+  rename_with(.cols = c(mean_wind, max_wind),
+              .fn = ~ paste0(.x, "_m1"))
+
+ar_pump <- map(.x = 1:3, function(i) {
+  data %>%
+    select(date, pump_cfs) %>% 
+    mutate(date = date + days(i)) %>%
+    rename_with(.cols = pump_cfs,
+                .fn = ~ paste0(.x, "_m", i))
+}) %>% 
+  reduce(., full_join)
+
+ar_nf <- map(.x = 1:4, function(i) {
+  data %>%
+    select(date, nf_cfs) %>% 
+    mutate(date = date + days(i)) %>%
+    rename_with(.cols = nf_cfs,
+                .fn = ~ paste0(.x, "_m", i))
+}) %>% 
+  reduce(., full_join)
+
+ar_chip <- map(.x = 1:4, function(i) {
+  data %>%
+    select(date, chipmunk_cfs) %>% 
+    mutate(date = date + days(i)) %>%
+    rename_with(.cols = chipmunk_cfs,
+                .fn = ~ paste0(.x, "_m", i))
+}) %>% 
+  reduce(., full_join)
+```
+
+```{r}
+keep_vars <- c("date", "mean_1m_temp_degC", "mean_0_5m_temp_degC",
+               "mean_1m_temp_degC_m1", "mean_0_5m_temp_degC_m1",
+               "total_solar_radiation", "total_solar_radiation_m1", "total_solar_radiation_m2",
+               "mean_air_temp", "min_air_temp", "max_air_temp",
+               "mean_air_temp_m1", "min_air_temp_m1", "max_air_temp_m1",
+               "mean_rel_hum_m1", "mean_rel_hum_m2", 
+               "pump_cfs_m1", "pump_cfs_m2", "pump_cfs_m3",
+               "mean_wind", "max_wind", "mean_wind_m1", "max_wind_m1",
+               "nf_cfs_m1", "nf_cfs_m2", "nf_cfs_m3", "nf_cfs_m4",
+               "chipmunk_cfs_m1", "chipmunk_cfs_m2", "chipmunk_cfs_m3", "chipmunk_cfs_m4")
+
+model_data <- reduce(list(data, ar_air_temp, ar_chip, ar_hum, 
+                     ar_nf, ar_pump, ar_sol_rad, ar_temp, ar_wind),
+                full_join) %>% 
+  select(all_of(keep_vars)) %>% 
+  filter(complete.cases(.))
+
+write_csv(model_data, "model_submodule/forecast_rollout/data/model_data.csv")
+```
+
+

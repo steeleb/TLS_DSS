@@ -3,6 +3,7 @@ source("global.R")
 
 # Define the UI
 ui <- page_navbar(
+  fillable = TRUE,
   title = "TLS-DSS: Three Lakes System Decision Support System",
   
   # Home tab ----
@@ -15,10 +16,10 @@ ui <- page_navbar(
         responsive data-informed model to estimate the impacts of varying
         pump operational regimes on the water temperature at Shadow Mountain
         Reservoir."),
+      p(HTML("This app works best when used <strong><em>full-screen</em></strong>. Graphics will not
+             render properly if used in minimized screen or on a mobile device.")),
       p("This application is under development and currently is being tested on
         data from the year 2024."),
-      p("Use the navigation bar to access submodules (top right burger button 
-        or along the top of the screen, depending on how large your screen is).")
     )
   ),
   
@@ -29,16 +30,17 @@ ui <- page_navbar(
       card_header("Data Explorer"),
       fillable = TRUE,
       layout_sidebar(
+        border = FALSE,
         sidebar = sidebar(
           fillable = TRUE,
           width = 300,
           selectInput("dataFile", "Select Data Table to Display:", 
-                                  choices = list_data_files())
+                      choices = list_data_files())
         ),
-          
+        
         # Main content based on selected option
         div(
-          class = "h-100 w-100",  # Use full width/height
+          fillable = TRUE,
           uiOutput("dynamicContent", class = "h-100")
         )
       )
@@ -95,5 +97,38 @@ ui <- page_navbar(
         )
       )
     )
-  )
+  ), 
+  
+  # Forecast Panel ----
+  nav_panel(
+    title = "Forecast Panel",
+    ## create a side panel for date selection and the uiOutput("pupming_summary")
+    div(
+      style = "min-height: 600px; height: 100%;",
+      card(
+        navset_card_tab(
+          nav_panel(
+            title = "Water temperature forecast for July 15-21, 2024",
+            card_header(uiOutput("pumping_summary")),
+            plotOutput("fore_airtemp_20240715", height = "300px"),
+            plotOutput("fore_ns_20240715", height = "300px"),
+            plotOutput("fore_int_20240715", height = "300px"),
+            p(class = "text-muted", "Forecast generated July 14, 2024, 
+            data with GREY in background is forecasted.")
+          ),
+          
+          nav_panel(
+            title = "Water temperature observed for July 15-21, 2024",
+            plotOutput("fore_ns_actual_20240715", height = "300px"),
+            plotOutput("fore_int_actual_20240715", height = "300px")
+          )
+          
+          ## add summary of model runs to this point in time.
+          
+        )
+      )
+    )
+  ) 
+  
+  ## add feature importance information/interpretation in additional hamburger
 )
