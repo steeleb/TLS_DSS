@@ -49,7 +49,7 @@ ui <- page_navbar(
   
   # Dialog Submodule ----
   nav_panel(
-    title = "Dialog Submodule",
+    title = "Previoius 30 Day Trends",
     card(
       layout_sidebar(
         sidebar = sidebar(
@@ -87,11 +87,12 @@ ui <- page_navbar(
               card(
                 card_header("Observed Data (Previous 30 Days)"),
                 dataTableOutput("prevDataTable")
-              ),
-              card(
-                card_header("Forecasted Weather (Next 7 Days)"),
-                dataTableOutput("forecastDataTable")
               )
+              # ,
+              # card(
+              #   card_header("Forecasted Weather (Next 7 Days)"),
+              #   dataTableOutput("forecastDataTable")
+              # )
             )
           )
         )
@@ -102,33 +103,43 @@ ui <- page_navbar(
   # Forecast Panel ----
   nav_panel(
     title = "Forecast Panel",
-    ## create a side panel for date selection and the uiOutput("pupming_summary")
-    div(
-      style = "min-height: 600px; height: 100%;",
-      card(
-        navset_card_tab(
-          nav_panel(
-            title = "Water temperature forecast for July 15-21, 2024",
-            card_header(uiOutput("pumping_summary")),
-            plotOutput("fore_airtemp_20240715", height = "300px"),
-            plotOutput("fore_ns_20240715", height = "300px"),
-            plotOutput("fore_int_20240715", height = "300px"),
-            p(class = "text-muted", "Forecast generated July 14, 2024, 
-            data with GREY in background is forecasted.")
-          ),
-          
-          nav_panel(
-            title = "Water temperature observed for July 15-21, 2024",
-            plotOutput("fore_ns_actual_20240715", height = "300px"),
-            plotOutput("fore_int_actual_20240715", height = "300px")
+    layout_sidebar(
+      sidebar = sidebar(
+        width = "20%",
+        dateInput(
+          inputId = "forecast_date",
+          label = "Select forecast start date:",
+          value = as.Date("2024-07-15"),
+          min = as.Date("2024-07-01"),
+          max = as.Date("2024-08-31")
+        ),
+        uiOutput("pumping_summary")  # optionally in sidebar
+      ),
+      
+      ## create a side panel for date selection and the uiOutput("pupming_summary")
+      div(
+        style = "min-height: 600px; height: 100%;",
+        card(
+          navset_card_tab(
+            nav_panel(
+              uiOutput("forecast_title"),
+              plotOutput("fore_airtemp", height = "300px"),
+              plotOutput("fore_ns", height = "300px"),
+              plotOutput("fore_int", height = "300px"),
+              p(class = "text-muted", textOutput("forecast_metadata"))
+            )
+            # ,
+            # nav_panel(
+            #   title = "Observed temperatures",
+            #   plotOutput("fore_ns_actual", height = "300px"),
+            #   plotOutput("fore_int_actual", height = "300px")
+            # )
+            
+            ## add summary of model runs to this point in time.
           )
-          
-          ## add summary of model runs to this point in time.
-          
         )
       )
-    )
-  ) 
-  
+    ) 
+  )
   ## add feature importance information/interpretation in additional hamburger
 )
