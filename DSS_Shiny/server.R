@@ -261,6 +261,7 @@ server <- function(input, output, session) {
                     "static" = static,
                     "pulsing" = pulsing)
   
+  ### Create pumping text summary ----
   output$pumping_summary <- renderUI({
     req(input$forecast_date)
     
@@ -274,18 +275,44 @@ server <- function(input, output, session) {
     
     div(
       style = "line-height: 1.4; font-size: 14px;",
-      HTML(paste0(
-        "Optimal pumping regime:"," <strong>", optimal_model, "</strong><br>",
-        "<br>",
-        "Near surface summary:<br>",
-        near_surface_days, "/7 days <em>below</em> algal temperature threshold<br>",
-        "<br>",
-        "Integrated summary:<br>", 
-        integrated_days, "/7 days <em>above</em> diatom temperature threshold"
-      ))
+      # check to see if there was a tie to determine optimal description
+      if (optimal$tie) {
+        HTML(paste0(
+          "Optimal pumping regime:"," <strong>", optimal_model, "</strong><br>",
+          "<br>",
+          if (input$forecast_date < ymd("2024-07-01")) {
+            "Optimal regime determined as that which has the highest average forecasted
+            temperature for integrated temperature over the next 7 days."
+          } else {
+            "Optimal regime determined as that which has the lowest average forecasted
+            temperature for near-surface temperature over the next 7 days."
+          },
+          "<br><br>",
+          "Near surface summary:<br>",
+          near_surface_days, "/7 days <em>below</em> algal temperature threshold<br>",
+          "<br>",
+          "Integrated summary:<br>", 
+          integrated_days, "/7 days <em>above</em> diatom temperature threshold"
+        ))
+      } else {
+        HTML(paste0(
+          "Optimal pumping regime:"," <strong>", optimal_model, "</strong><br>",
+          "<br>",
+          "Regime determined by maximization of number of days meeting temperature threshold at focus depth.<br>",
+          "Focus depth for today's forecast date is: ", 
+          if (input$forecast_date < ymd("2024-07-01")) {"integrated"} else {"near-surface"},
+          "<br><br>",
+          "Near surface summary:<br>",
+          near_surface_days, "/7 days <em>below</em> algal temperature threshold<br>",
+          "<br>",
+          "Integrated summary:<br>", 
+          integrated_days, "/7 days <em>above</em> diatom temperature threshold"
+        ))
+      }
     )
   })
   
+  ### Forecast title ----
   output$forecast_title <- renderUI({
     req(input$forecast_date)
     
@@ -299,6 +326,7 @@ server <- function(input, output, session) {
     ))
   })
   
+  ### Make plots ----
   output$fore_airtemp <- renderPlot({
     req(input$forecast_date)
     plot_forecast_airtemp(met_data = met, 
@@ -391,9 +419,10 @@ server <- function(input, output, session) {
   # }, res = 100)
   # 
   
+  ### Add footer ----
   output$forecast_metadata <- renderText({
     req(input$forecast_date)
-    paste("Forecast generated", format(input$forecast_date - 1, "%B %d, %Y"),
+    paste("Forecast generated", format(input$forecast_date - days(1), "%B %d, %Y"),
           "— data with GREY in background is forecasted.")
   })
   

@@ -125,27 +125,45 @@ determine_optimal_forecast <- function(forecast_data, date_of_forecast) {
   
   # okay, now we need to determine the optimal regime given the summary data
   optimal <- {
-    # optimal will be where the pumping regime results in the most number
-    # of days conforming to thresholds. 
-    sum_threshold <- threshold_summary %>% 
-      summarize(tot_n_regime = sum(n),
-                .by = "regime") 
-    max_n_sum = max(sum_threshold$tot_n_regime)
-    threshold_regime <- sum_threshold %>% 
-      filter(tot_n_regime == max_n_sum)
     
-    # if there is a tie here, we need to do a tiebreaker based on minimizing
-    # or maximizing temperature based on the season
-    if (nrow(threshold_regime) > 1) {
-      # optimization is based on forecast, where early season emphasizes 
-      # integrated temperature maximization and late season emphasizes 
+    # optimal will be where the pumping regime results in the most number
+    # of days conforming to thresholds. however, this might result in a tie,
+    # in which case we need to determine how to make that decision.
+    
+    # first step: determine focus depth by date:
+    if (date_of_forecast < ymd("2024-07-01")) {
+      focus <- "int"
+    } else {
+      focus <- "ns"
+    }
+    
+    # filter for the focus depth
+    threshold_filter <- threshold_summary %>% 
+      filter(summary == focus)
+    
+    # determine the max, filter for the maximum
+    max_days <- max(threshold_filter$n)
+    threshold_regime <- threshold_filter %>% 
+      filter(n == max_days)
+    
+    # if the number of rows is == 1, our regime is the one stated in the 
+    # threshold regime dataframe
+    if (nrow(threshold_regime) == 1) {
+      optim <- threshold_regime %>%
+        filter(regime == unique(threshold_regime$regime)) %>% 
+        mutate(tie = FALSE)
+    } else {
+      # if there is a tie in n days, we need to optimize based on forecast, where early 
+      # season uses integrated temperature maximization and late season uses 
       # near surface temperature minimization
-      if (forecast_date < ymd("2024-07-01")) {
-        optim <- threshold_summary %>% 
-          filter(summary == "int") %>% 
+      if (focus == "int") {
+        optim <- threshold_regime %>% 
           # remove control from consideration
-          filter(!regime %in% "control") %>% 
-          arrange(desc(min_max_temp)) %>% 
+          filter(!regime %in% "control") %>%
+          # maximize by sorting in descending order
+          summarize(average_temp = mean(min_max_temp),
+                    .by = regime) %>%
+          arrange(desc(average_temp)) %>% 
           slice(1) %>% 
           mutate(tie = TRUE)
       } else {
@@ -153,18 +171,15 @@ determine_optimal_forecast <- function(forecast_data, date_of_forecast) {
           filter(summary == "ns") %>% 
           # remove control from consideration
           filter(!regime %in% "control") %>% 
-          arrange(min_max_temp) %>% 
+          summarize(average_temp = mean(min_max_temp),
+                    .by = regime) %>%
+          arrange(average_temp) %>% 
           slice(1) %>% 
           mutate(tie = TRUE)
       }
-    } else {
-      # otherwise the optim is the sum threshold that is highest
-      optim <- threshold_summary %>% 
-        filter(regime == unique(threshold_regime$regime)) %>% 
-        mutate(tie = FALSE)
+      # return the optimal regime!
+      optim
     }
-    # return the optimal regime!
-    optim
   }
   
   # return the threshold summary where the regime is optimal, pivoting for 
@@ -208,13 +223,13 @@ plot_forecast_airtemp <- function(met_data, start_date) {
     scale_x_date(date_breaks = "1 day", date_labels = "%B %d", date_minor_breaks = "1 day") +
     theme_bw() + 
     theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
+  
 }
 
 plot_forecast_ns <- function(obs_temp_data, forecast_data, date_of_forecast) {
   # Get previous data
   previous_10_days <- obs_temp_data %>%
-    filter(between(date, date_of_forecast - days(10), date_of_forecast))
+    filter(between(date, date_of_forecast - days(10), date_of_forecast - days(1)))
   
   # make plot
   forecast_data %>%
@@ -244,7 +259,7 @@ plot_forecast_ns <- function(obs_temp_data, forecast_data, date_of_forecast) {
 plot_forecast_int <- function(obs_temp_data, forecast_data, date_of_forecast) {
   # Get previous data
   previous_10_days <- obs_temp_data %>%
-    filter(between(date, date_of_forecast - days(10), date_of_forecast))
+    filter(between(date, date_of_forecast - days(10), date_of_forecast - days(1)))
   
   # make plot
   forecast_data %>%

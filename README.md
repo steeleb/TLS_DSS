@@ -5,7 +5,11 @@ temperature in Shadow Mountain Reservoir using forecasted weather and varying
 operational pumping regimes.
 
 The code in this repository is covered by the MIT use license. We request that 
-all downstream uses of this work be available to the public when possible.
+all downstream uses of this work be available to the public when possible. During
+development of the code in this repository, AI (ChatGPT) was used to help create 
+the architecture for the Shiny App and was also used to help with coding the 
+rollout of the forecast in Python, most code was modified in part or whole after 
+creation by ChatGPT.
 
 Repository contact: B Steele (b dot steele at colostate dot edu)
 
@@ -91,8 +95,9 @@ This repository includes code to deploy a shiny app. The app can be accessed
 [here](https://geocentroid.shinyapps.io/TLS-DSS/). At this time, the App must be 
 manually updated, but updates will be automated within the {targets} pipeline 
 in the future.
-3
-Manual update can be triggered at the console using the following command:
+
+Manual update of the app can be triggered at the console using the following 
+command:
 
 ```
 rsconnect::deployApp("DSS_Shiny/", account = "geocentroid", appName = "TLS-DSS")
