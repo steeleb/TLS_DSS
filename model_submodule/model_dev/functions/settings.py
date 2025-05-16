@@ -4,7 +4,7 @@ settings = {
     "activations": ["tanh", "tanh", "tanh", "tanh", "tanh", "tanh", "tanh"],
     "learning_rate": 0.001,
     "random_seed": 57,
-    "max_epochs": 1000,
+    "max_epochs": 2000,
     "batch_size": 128,
     "patience": 500,
     "dropout_rate": 0,

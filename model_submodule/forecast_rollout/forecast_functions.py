@@ -96,6 +96,30 @@ def static_regime(data, control, one_date, flow):
 
     return filtered_static_pump
 
+def static_regime_tiny(data, control, one_date, flow):
+    
+    # coerce one_date to a pandas datetime object, as well as the forecast date column!
+    one_date = pd.to_datetime(one_date)
+
+    # Convert forecast_date columns to datetime if needed
+    control["forecast_date"] = pd.to_datetime(control["forecast_date"])
+    data["forecast_date"] = pd.to_datetime(data["forecast_date"])
+
+    # we need the control data for filling in observed data
+    filtered_data = control.loc[control["forecast_date"] == one_date].copy()
+
+    # and just filter the incoming data for the forecast date.
+    filtered_static_pump = data.loc[data["forecast_date"] == one_date].copy()
+
+    # m1 for the first day will be m1 from the control data
+    filtered_static_pump.loc[filtered_static_pump.index == one_date, "pump_cfs_m1"] = filtered_data.loc[one_date, "pump_cfs_m1"]
+
+    # all of the m1 will be 220 cfs after the first day
+    mask = [isinstance(idx, pd.Timestamp) and idx > one_date for idx in filtered_static_pump.index]
+    filtered_static_pump.loc[mask, "pump_cfs_m1"] = flow
+
+    return filtered_static_pump
+
 def pulsed_regime(data, control, one_date, weekday_flow, weekend_flow):
     
     # coerce one_date to a pandas datetime object, as well as the forecast date column!
@@ -150,6 +174,36 @@ def pulsed_regime(data, control, one_date, weekday_flow, weekend_flow):
         # weekday
         filtered_pulsing_pump.loc[filtered_pulsing_pump.index > one_date + pd.Timedelta(days=2), "pump_cfs_m3"] = weekday_flow  
 
+    return filtered_pulsing_pump
+
+def pulsed_regime_tiny(data, control, one_date, weekday_flow, weekend_flow):
+    
+    # coerce one_date to a pandas datetime object, as well as the forecast date column!
+    one_date = pd.to_datetime(one_date)
+
+    # Convert forecast_date columns to datetime if needed
+    control["forecast_date"] = pd.to_datetime(control["forecast_date"])
+    data["forecast_date"] = pd.to_datetime(data["forecast_date"])
+
+    # we need the control data for filling in observed data
+    filtered_data = control.loc[control["forecast_date"] == one_date].copy()
+
+    # and just filter the incoming data for the forecast date.
+    filtered_pulsing_pump = data.loc[data["forecast_date"] == one_date].copy()
+    
+    # create a column for day of week using the index in the pump_pulsing dataframe, in shorthand mon, tue, wed, etc.
+    filtered_pulsing_pump["day_of_week"] = filtered_pulsing_pump.index.day_name()
+
+    # m1 for the first day will be m1 from the control data
+    filtered_pulsing_pump.loc[filtered_pulsing_pump.index == one_date, "pump_cfs_m1"] = filtered_data.loc[one_date, "pump_cfs_m1"]
+    # all of the m1 will be 220 cfs after the first day if a weekend, 440 cfs if a weekday
+    if filtered_pulsing_pump.loc[filtered_pulsing_pump.index == one_date, "day_of_week"].values[0] in ["Saturday", "Sunday"]:
+        # weekend
+        filtered_pulsing_pump.loc[filtered_pulsing_pump.index > one_date, "pump_cfs_m1"] = weekend_flow
+    else:
+        # weekday
+        filtered_pulsing_pump.loc[filtered_pulsing_pump.index > one_date, "pump_cfs_m1"] = weekday_flow
+    
     return filtered_pulsing_pump
 
 def make_forecast(features, model, model_number, forecast_date, valid_date):

@@ -127,8 +127,8 @@ ui <- page_navbar(
           inputId = "forecast_date",
           label = "Select forecast start date:",
           value = ymd("2024-07-15"),
-          min = ymd("2024-06-07"),
-          max = ymd("2024-10-15")
+          min = ymd("2024-06-13"),
+          max = ymd("2024-10-09")
         ),
         uiOutput("pumping_summary")  # optionally in sidebar
       ),
