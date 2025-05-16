@@ -1,0 +1,97 @@
+---
+title: "Calculating Performance of the Baseline"
+---
+
+This script calculates performance of a baseline as a way to gauge performance of the arNN. For this application, we will use a persistence model, that is, assuming yesterday-is-today.
+
+```{r}
+library(tidyverse)
+library(Metrics)
+
+data <- read_csv("model_submodule/model_dev/data/SMR_buoy_daily_summary.csv") %>% 
+  filter(year(date) %in% c(2015,2022))
+data$mean_1m_temp_degC_p1 = lag(data$mean_1m_temp_degC, 1)
+data$mean_0_5m_temp_degC_p1 = lag(data$mean_0_5m_temp_degC, 1) 
+
+reduced <- data %>% 
+  select(mean_1m_temp_degC, mean_1m_temp_degC_p1, mean_0_5m_temp_degC, mean_0_5m_temp_degC_p1) 
+
+reduced <- reduced[complete.cases(reduced),]
+```
+
+```{r}
+mse(reduced$mean_1m_temp_degC, reduced$mean_1m_temp_degC_p1)
+rmse(reduced$mean_1m_temp_degC, reduced$mean_1m_temp_degC_p1)
+mae(reduced$mean_1m_temp_degC, reduced$mean_1m_temp_degC_p1)
+mape(reduced$mean_1m_temp_degC, reduced$mean_1m_temp_degC_p1)
+```
+
+```{r}
+mse(reduced$mean_0_5m_temp_degC, reduced$mean_0_5m_temp_degC_p1)
+rmse(reduced$mean_0_5m_temp_degC, reduced$mean_0_5m_temp_degC_p1)
+mae(reduced$mean_0_5m_temp_degC, reduced$mean_0_5m_temp_degC_p1)
+mape(reduced$mean_0_5m_temp_degC, reduced$mean_0_5m_temp_degC_p1)
+```
+
+And do the same at a 7-day time horizon
+
+```{r}
+reduced$mean_1m_temp_degC_p7 = lag(reduced$mean_1m_temp_degC, 7)
+reduced$mean_0_5m_temp_degC_p7 = lag(reduced$mean_0_5m_temp_degC, 7)
+
+reduced <- reduced[complete.cases(reduced),]
+```
+
+```{r}
+mse(reduced$mean_1m_temp_degC, reduced$mean_1m_temp_degC_p7)
+rmse(reduced$mean_1m_temp_degC, reduced$mean_1m_temp_degC_p7)
+mae(reduced$mean_1m_temp_degC, reduced$mean_1m_temp_degC_p7)
+mape(reduced$mean_1m_temp_degC, reduced$mean_1m_temp_degC_p7)
+```
+
+```{r}
+mse(reduced$mean_0_5m_temp_degC, reduced$mean_0_5m_temp_degC_p7)
+rmse(reduced$mean_0_5m_temp_degC, reduced$mean_0_5m_temp_degC_p7)
+mae(reduced$mean_0_5m_temp_degC, reduced$mean_0_5m_temp_degC_p7)
+mape(reduced$mean_0_5m_temp_degC, reduced$mean_0_5m_temp_degC_p7)
+```
+
+Now compare that with 7-day forecast from the arNN. These data were created in the operational model/forecast_walkthrough_control... file
+
+```{r}
+forecast_control_2015 <- read_csv("model_submodule/model_dev/operational_model/test_forecast/forecasted_temp_2015_control_collated.csv")
+forecast_control_2022 <- read_csv("model_submodule/model_dev/operational_model/test_forecast/forecasted_temp_2022_control_collated.csv")
+```
+
+We need the 7th day of each of these forecasts
+```{r}
+all_forecasts <- bind_rows(forecast_control_2015, forecast_control_2022) 
+unique_fore_date <- unique(all_forecasts$forecast_date)
+
+seventh_day <- map(.x = unique_fore_date, 
+                   .f = ~ {
+                     all_forecasts %>% 
+                       filter(forecast_date == .x, valid_date == .x + days(6)) %>% 
+                       summarize(ens_mean_1m_temp_degC = mean(mean_1m_temp_degC),
+                                 ens_mean_0_5m_temp_degC = mean(mean_0_5m_temp_degC),
+                                 .by = valid_date)
+                   }) %>% 
+  bind_rows() %>% 
+  rename(date = valid_date) 
+
+data_fore <- inner_join(data, seventh_day)
+```
+
+```{r}
+mse(data_fore$ens_mean_1m_temp_degC, data_fore$mean_1m_temp_degC)
+rmse(data_fore$ens_mean_1m_temp_degC, data_fore$mean_1m_temp_degC)
+mae(data_fore$ens_mean_1m_temp_degC, data_fore$mean_1m_temp_degC)
+mape(data_fore$ens_mean_1m_temp_degC, data_fore$mean_1m_temp_degC)
+```
+
+```{r}
+mse(data_fore$ens_mean_0_5m_temp_degC, data_fore$mean_0_5m_temp_degC)
+rmse(data_fore$ens_mean_0_5m_temp_degC, data_fore$mean_0_5m_temp_degC)
+mae(data_fore$ens_mean_0_5m_temp_degC, data_fore$mean_0_5m_temp_degC)
+mape(data_fore$ens_mean_0_5m_temp_degC, data_fore$mean_0_5m_temp_degC)
+```

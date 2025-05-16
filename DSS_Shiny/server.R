@@ -333,6 +333,11 @@ server <- function(input, output, session) {
                           start_date = input$forecast_date)
   }, res = 100)
   
+  output$pump_ops_bars <- renderPlot({
+    req(input$forecast_date)
+    plot_pump_forecast(obs_pump = water_bal,
+                       date_of_forecast = input$forecast_date)
+  })
   output$fore_ns <- renderPlot({
     req(input$forecast_date)
     plot_forecast_ns(obs_temp_data = temp_data, 

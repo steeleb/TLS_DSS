@@ -20,6 +20,23 @@ ui <- page_navbar(
              render properly if used in minimized screen or on a mobile device.")),
       p("This application is under development and currently is being tested on
         data from the year 2024."),
+      p(),
+      p("The 'Underlying Data' tab is essentially the data/database submodule that
+        stores data. Within the context of the UI, the data used to inform the 
+        model and figures can be queried from this tab."),
+      p("The 'Previous 30 Day Trends' provides figures of a subset of parameter
+        for the previous 30 days from a forecast date selected at the left-hand
+        side of the screen."),
+      p("The 'Forecast Panel' tab displays the previous 10 days of water temperature
+        and the forecasted water temperature for the next 7 days for 3 pumping scenarios,
+        the control (the actual operation of the pump in 2024), static (a consistent
+        220 cfs flow over the future 7 days), and a pulsing (220 cfs flow on weekends,
+        440 cfs on weekdays)."),
+      p("Forecasts are generated for the day selected on the left hand side of the
+        screen. Below that selection is text that will indicate the optimal pumping
+        regime based on the expert system, a brief explanation of how that regime
+        was chosen as optimal, and an indication of how many days the forecasts
+        met the goal threshold temperature for each depth horizon.")
     )
   ),
   
@@ -124,6 +141,7 @@ ui <- page_navbar(
             nav_panel(
               uiOutput("forecast_title"),
               plotOutput("fore_airtemp", height = "300px"),
+              plotOutput("pump_ops_bars", height = "300px"),
               plotOutput("fore_ns", height = "300px"),
               plotOutput("fore_int", height = "300px"),
               p(class = "text-muted", textOutput("forecast_metadata"))

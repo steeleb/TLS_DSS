@@ -220,10 +220,41 @@ plot_forecast_airtemp <- function(met_data, start_date) {
     geom_line() +
     labs(x = NULL, y = "air temperature\n(deg C)", color = "aggregation\ntype") +
     scale_color_tableau() +
-    scale_x_date(date_breaks = "1 day", date_labels = "%B %d", date_minor_breaks = "1 day") +
+    scale_x_date(date_breaks = "1 day", 
+                 date_labels = "%B %d", 
+                 date_minor_breaks = "1 day") +
     theme_bw() + 
     theme(axis.text.x = element_text(angle = 45, hjust = 1))
+}
+
+plot_pump_forecast <- function(obs_pump, date_of_forecast) {
+  prev_act <- obs_pump %>% 
+    filter(between(date, date_of_forecast - days(10), date_of_forecast + days(6))) %>% 
+    select(date, dow, act_pump_cfs = pump_cfs) %>% 
+    mutate(observed = if_else(date < date_of_forecast, act_pump_cfs, NA_real_),
+           control = if_else(date >= date_of_forecast, act_pump_cfs, NA_real_),
+           static = if_else(date >= date_of_forecast, 220, NA_real_),
+           pulsed = case_when(date >= date_of_forecast & dow %in% c("Sat", "Sun") ~ 220,
+                              date >= date_of_forecast & !dow %in% c("Sat", "Sun") ~ 440,
+                              .default = NA_real_)) %>% 
+    select(-act_pump_cfs) %>% 
+    pivot_longer(cols = observed:pulsed,
+                 names_to = "regime",
+                 values_to = "cfs") %>% 
+    mutate(regime = factor(regime, levels = c("observed", "control", "static", "pulsed")))
   
+  ggplot(prev_act, aes(x = date, y = cfs, fill = regime)) +
+    geom_rect(aes(xmin = date_of_forecast, xmax = date_of_forecast + days(6),
+                  ymin = -Inf, ymax = Inf),
+              fill = "grey90", alpha = 0.5, inherit.aes = FALSE) +
+    geom_col(position = position_dodge(preserve = "single")) +
+    labs(x = NULL, y = "average daily pump operation\n(cfs)") +
+    scale_fill_tableau() +
+    scale_x_date(date_breaks = "1 day", 
+                 date_labels = "%B %d", 
+                 date_minor_breaks = "1 day") +
+    theme_bw() + 
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
 }
 
 plot_forecast_ns <- function(obs_temp_data, forecast_data, date_of_forecast) {
