@@ -249,167 +249,186 @@ server <- function(input, output, session) {
   
   # FORECAST PANEL ----
   
+  # read in data
+  control <- read_csv("www/forecast/forecasted_temp_control_collated.csv") %>%
+    mutate(regime = "control")
+  static <- read_csv("www/forecast/forecasted_temp_static_collated.csv") %>%
+    mutate(regime = "static")
+  pulsing <- read_csv("www/forecast/forecasted_temp_pulsing_collated.csv") %>%
+    mutate(regime = "pulsing")
+  
+  forecasts <- list("control" = control,
+                    "static" = static,
+                    "pulsing" = pulsing)
+  
+  ### Create pumping text summary ----
   output$pumping_summary <- renderUI({
+    req(input$forecast_date)
+    
+    optimal <- determine_optimal_forecast(forecast_data = forecasts,
+                                          date_of_forecast = input$forecast_date)
+    
     # require summary function dataset
-    optimal_model <- "static" # replace with optimal model name
-    near_surface_days <- 0  # Replace with your computed value
-    integrated_days <- 0    # Replace with your computed value
+    optimal_model <- optimal$regime 
+    near_surface_days <- optimal$n_ns
+    integrated_days <- optimal$n_int
+    
+    div(
+      style = "line-height: 1.4; font-size: 14px;",
+      # check to see if there was a tie to determine optimal description
+      if (optimal$tie) {
+        HTML(paste0(
+          "Optimal pumping regime:"," <strong>", optimal_model, "</strong><br>",
+          "<br>",
+          if (input$forecast_date < ymd("2024-07-01")) {
+            "Optimal regime determined as that which has the highest average forecasted
+            temperature for integrated temperature over the next 7 days."
+          } else {
+            "Optimal regime determined as that which has the lowest average forecasted
+            temperature for near-surface temperature over the next 7 days."
+          },
+          "<br><br>",
+          "Near surface summary:<br>",
+          near_surface_days, "/7 days <em>below</em> algal temperature threshold<br>",
+          "<br>",
+          "Integrated summary:<br>", 
+          integrated_days, "/7 days <em>above</em> diatom temperature threshold"
+        ))
+      } else {
+        HTML(paste0(
+          "Optimal pumping regime:"," <strong>", optimal_model, "</strong><br>",
+          "<br>",
+          "Regime determined by maximization of number of days meeting temperature threshold at focus depth.<br>",
+          "Focus depth for today's forecast date is: ", 
+          if (input$forecast_date < ymd("2024-07-01")) {"integrated"} else {"near-surface"},
+          "<br><br>",
+          "Near surface summary:<br>",
+          near_surface_days, "/7 days <em>below</em> algal temperature threshold<br>",
+          "<br>",
+          "Integrated summary:<br>", 
+          integrated_days, "/7 days <em>above</em> diatom temperature threshold"
+        ))
+      }
+    )
+  })
+  
+  ### Forecast title ----
+  output$forecast_title <- renderUI({
+    req(input$forecast_date)
+    
+    start_date <- input$forecast_date
+    end_date <- input$forecast_date + days(6)  # 7-day range
     
     HTML(paste0(
-      "Optimal pumping regime: <strong>", optimal_model, "</strong><br>",
-      "near surface summary: ", near_surface_days, "/7 days <em>below</em> threshold<br>",
-      "integrated summary: ", integrated_days, "/7 days <em>above</em> threshold"
+      "Water Temperature Forecast for ",
+      format(start_date, "%B %d, %Y"), " – ",
+      format(end_date, "%B %d, %Y")
     ))
   })
   
-  output$fore_airtemp_20240715 <- renderPlot({
-    met %>% 
-      filter(between(date, ymd("2024-07-04"), ymd("2024-07-21")))%>% 
-      select(date, mean_temp_degC, max_temp_degC) %>% 
-      pivot_longer(cols = mean_temp_degC:max_temp_degC,
-                   names_to = "air_temp_agg", 
-                   values_to = "value") %>% 
-      mutate(air_temp_agg = factor(air_temp_agg, 
-                                   levels = c("max_temp_degC", "mean_temp_degC"),
-                                   labels = c("max", "mean"))) %>% 
-      ggplot(., aes(x = date, y = value, color = air_temp_agg)) + 
-      geom_rect(aes(xmin = as.Date("2024-07-15"), xmax = as.Date("2024-07-21"), 
-                    ymin = -Inf, ymax = Inf),
-                fill = "grey90", alpha = 0.5, inherit.aes = FALSE) +
-      geom_line() + 
-      labs(x = NULL, y = "air temperature\n(deg C)", color = "aggregation\ntype") +
-      scale_color_tableau() +
-      theme_bw()
+  ### Make plots ----
+  output$fore_airtemp <- renderPlot({
+    req(input$forecast_date)
+    plot_forecast_airtemp(met_data = met, 
+                          start_date = input$forecast_date)
   }, res = 100)
   
-  output$fore_ns_20240715 <- renderPlot({
-    # Get previous data
-    previous_10_days <- temp_data %>% 
-      filter(between(date, ymd("2024-07-04"), ymd("2024-07-14")))
-    # Get data from output
-    control <- read_csv("www/forecast/forecasted_temp_control_collated.csv") %>% 
-      mutate(regime = "control")
-    static <- read_csv("www/forecast/forecasted_temp_static_collated.csv") %>% 
-      mutate(regime = "static")
-    pulsing <- read_csv("www/forecast/forecasted_temp_pulsing_collated.csv") %>% 
-      mutate(regime = "pulsing")
-    
-    forecast <- reduce(list(control, static, pulsing),
-                       full_join)
-    
-    forecast %>% 
-      summarize(mean_1m = mean(mean_1m_temp_degC), 
-                .by = c(valid_date, regime)) %>% 
-      ggplot(., aes(x = valid_date, y = mean_1m, color = regime)) + 
-      geom_rect(aes(xmin = as.Date("2024-07-15"), xmax = as.Date("2024-07-21"), 
-                    ymin = -Inf, ymax = Inf),
-                fill = "grey90", alpha = 0.5, inherit.aes = FALSE) +
-      geom_line() + 
-      geom_abline(slope = 0, intercept = 15, linetype = 2) +
-      annotate("text", x = as.Date("2024-07-14"), y = 15.3, 
-               label = "Algal Threshold (goal < 15°C, summer to fall)", hjust = 0, size = 4) +
-      labs(x = NULL, y = "average near-suface (0-1m)\ntemperature, (deg C)") +
-      scale_color_tableau() +
-      geom_line(data = previous_10_days, inherit.aes = F, aes(x = date, y = mean_temp_ns)) +
-      theme_bw()
+  output$pump_ops_bars <- renderPlot({
+    req(input$forecast_date)
+    plot_pump_forecast(obs_pump = water_bal,
+                       date_of_forecast = input$forecast_date)
+  })
+  output$fore_ns <- renderPlot({
+    req(input$forecast_date)
+    plot_forecast_ns(obs_temp_data = temp_data, 
+                     forecast_data = forecasts, 
+                     date_of_forecast = input$forecast_date)
   }, res = 100)
   
-  output$fore_int_20240715 <- renderPlot({
-    
-    # Get previous data
-    previous_10_days <- temp_data %>% 
-      filter(between(date, ymd("2024-07-04"), ymd("2024-07-14")))
-    # Get data from output
-    control <- read_csv("www/forecast/forecasted_temp_control_collated.csv") %>% 
-      mutate(regime = "control")
-    static <- read_csv("www/forecast/forecasted_temp_static_collated.csv") %>% 
-      mutate(regime = "static")
-    pulsing <- read_csv("www/forecast/forecasted_temp_pulsing_collated.csv") %>% 
-      mutate(regime = "pulsing")
-    
-    forecast <- reduce(list(control, static, pulsing),
-                       full_join)
-    
-    forecast %>% 
-      summarize(mean_int = mean(mean_0_5m_temp_degC), 
-                .by = c(valid_date, regime)) %>% 
-      ggplot(., aes(x = valid_date, y = mean_int, color = regime)) + 
-      geom_rect(aes(xmin = as.Date("2024-07-15"), xmax = as.Date("2024-07-21"), 
-                    ymin = -Inf, ymax = Inf),
-                fill = "grey90", alpha = 0.5, inherit.aes = FALSE) +
-      geom_line()+ 
-      labs(x = NULL, y = "average integrated (0-5m)\ntemperature, (deg C)") +
-      scale_color_tableau() +
-      geom_abline(slope = 0, intercept = 14, linetype = 2) +
-      annotate("text", x = as.Date("2024-07-05"), y = 13.7, 
-               label = "Diatom Threshold (goal > 14°C, spring/early summer)", hjust = 0, size = 4) +
-      geom_line(data = previous_10_days, inherit.aes = F, aes(x = date, y = mean_temp_int)) +
-      theme_bw()
+  output$fore_int <- renderPlot({
+    req(input$forecast_date)
+    plot_forecast_int(obs_temp_data = temp_data, 
+                      forecast_data = forecasts, 
+                      date_of_forecast = input$forecast_date)
   }, res = 100)
   
-  output$fore_ns_actual_20240715 <- renderPlot({
-    # Get previous data
-    previous_10_days_plus <- temp_data %>% 
-      filter(between(date, ymd("2024-07-04"), ymd("2024-07-21")))
-    # Get data from output
-    control <- read_csv("www/forecast/forecasted_temp_control_collated.csv") %>% 
-      mutate(regime = "control")
-    static <- read_csv("www/forecast/forecasted_temp_static_collated.csv") %>% 
-      mutate(regime = "static")
-    pulsing <- read_csv("www/forecast/forecasted_temp_pulsing_collated.csv") %>% 
-      mutate(regime = "pulsing")
-    
-    forecast <- reduce(list(control, static, pulsing),
-                       full_join)
-    
-    forecast %>% 
-      summarize(mean_1m = mean(mean_1m_temp_degC), 
-                .by = c(valid_date, regime)) %>% 
-      ggplot(., aes(x = valid_date, y = mean_1m, color = regime)) + 
-      geom_rect(aes(xmin = as.Date("2024-07-15"), xmax = as.Date("2024-07-21"), 
-                    ymin = -Inf, ymax = Inf),
-                fill = "grey90", alpha = 0.5, inherit.aes = FALSE) +
-      geom_line() + 
-      labs(x = NULL, y = "average near-suface (0-1m)\ntemperature, (deg C)") +
-      scale_color_tableau() +
-      geom_abline(slope = 0, intercept = 15, linetype = 2) +
-      annotate("text", x = as.Date("2024-07-14"), y = 15.2, 
-               label = "Algal Threshold (goal < 15°C, summer to fall)", hjust = 0, size = 4) +
-      geom_line(data = previous_10_days_plus, inherit.aes = F, aes(x = date, y = mean_temp_ns)) +
-      theme_bw()
-  }, res = 100)
+  # remove the forecast performance for now
+  # output$fore_ns_actual <- renderPlot({
+  #   
+  #   req(input$forecast_date)
+  #   plot_observed_ns(input$forecast_date)
+  #   # # Get previous data
+  #   # previous_10_days_plus <- temp_data %>% 
+  #   #   filter(between(date, ymd("2024-07-04"), ymd("2024-07-21")))
+  #   # # Get data from output
+  #   # control <- read_csv("www/forecast/forecasted_temp_control_collated.csv") %>% 
+  #   #   mutate(regime = "control")
+  #   # static <- read_csv("www/forecast/forecasted_temp_static_collated.csv") %>% 
+  #   #   mutate(regime = "static")
+  #   # pulsing <- read_csv("www/forecast/forecasted_temp_pulsing_collated.csv") %>% 
+  #   #   mutate(regime = "pulsing")
+  #   # 
+  #   # forecast <- reduce(list(control, static, pulsing),
+  #   #                    full_join)
+  #   # 
+  #   # forecast %>% 
+  #   #   summarize(mean_1m = mean(mean_1m_temp_degC), 
+  #   #             .by = c(valid_date, regime)) %>% 
+  #   #   ggplot(., aes(x = valid_date, y = mean_1m, color = regime)) + 
+  #   #   geom_rect(aes(xmin = as.Date("2024-07-15"), xmax = as.Date("2024-07-21"), 
+  #   #                 ymin = -Inf, ymax = Inf),
+  #   #             fill = "grey90", alpha = 0.5, inherit.aes = FALSE) +
+  #   #   geom_line() + 
+  #   #   labs(x = NULL, y = "average near-suface (0-1m)\ntemperature, (deg C)") +
+  #   #   scale_color_tableau() +
+  #   #   geom_abline(slope = 0, intercept = 15, linetype = 2) +
+  #   #   annotate("text", x = as.Date("2024-07-14"), y = 15.2, 
+  #   #            label = "Algal Threshold (goal < 15°C, summer to fall)", hjust = 0, size = 4) +
+  #   #   geom_line(data = previous_10_days_plus, inherit.aes = F, aes(x = date, y = mean_temp_ns)) +
+  #   #   theme_bw()
+  # }, res = 100)
+  # 
+  # output$fore_int_actual <- renderPlot({
+  #   req(input$forecast_date)
+  #   plot_observed_int(input$forecast_date)
+  #   # 
+  #   # # Get previous data
+  #   # previous_10_days_plus <- temp_data %>% 
+  #   #   filter(between(date, ymd("2024-07-04"), ymd("2024-07-21")))
+  #   # # Get data from output
+  #   # control <- read_csv("www/forecast/forecasted_temp_control_collated.csv") %>% 
+  #   #   mutate(regime = "control")
+  #   # static <- read_csv("www/forecast/forecasted_temp_static_collated.csv") %>% 
+  #   #   mutate(regime = "static")
+  #   # pulsing <- read_csv("www/forecast/forecasted_temp_pulsing_collated.csv") %>% 
+  #   #   mutate(regime = "pulsing")
+  #   # 
+  #   # forecast <- reduce(list(control, static, pulsing),
+  #   #                    full_join)
+  #   # 
+  #   # forecast %>% 
+  #   #   summarize(mean_int = mean(mean_0_5m_temp_degC), 
+  #   #             .by = c(valid_date, regime)) %>% 
+  #   #   ggplot(., aes(x = valid_date, y = mean_int, color = regime)) + 
+  #   #   geom_rect(aes(xmin = as.Date("2024-07-15"), xmax = as.Date("2024-07-21"), 
+  #   #                 ymin = -Inf, ymax = Inf),
+  #   #             fill = "grey90", alpha = 0.5, inherit.aes = FALSE) +
+  #   #   geom_line()+ 
+  #   #   labs(x = NULL, y = "average integrated (0-5m)\ntemperature, (deg C)") +
+  #   #   scale_color_tableau() +
+  #   #   geom_abline(slope = 0, intercept = 14, linetype = 2) +
+  #   #   annotate("text", x = as.Date("2024-07-05"), y = 13.8, 
+  #   #            label = "Diatom Threshold (goal > 14°C, spring/early summer)", hjust = 0, size = 4) +
+  #   #   geom_line(data = previous_10_days_plus, inherit.aes = F, aes(x = date, y = mean_temp_int)) +
+  #   #   theme_bw()
+  # }, res = 100)
+  # 
   
-  output$fore_int_actual_20240715 <- renderPlot({
-    
-    # Get previous data
-    previous_10_days_plus <- temp_data %>% 
-      filter(between(date, ymd("2024-07-04"), ymd("2024-07-21")))
-    # Get data from output
-    control <- read_csv("www/forecast/forecasted_temp_control_collated.csv") %>% 
-      mutate(regime = "control")
-    static <- read_csv("www/forecast/forecasted_temp_static_collated.csv") %>% 
-      mutate(regime = "static")
-    pulsing <- read_csv("www/forecast/forecasted_temp_pulsing_collated.csv") %>% 
-      mutate(regime = "pulsing")
-    
-    forecast <- reduce(list(control, static, pulsing),
-                       full_join)
-    
-    forecast %>% 
-      summarize(mean_int = mean(mean_0_5m_temp_degC), 
-                .by = c(valid_date, regime)) %>% 
-      ggplot(., aes(x = valid_date, y = mean_int, color = regime)) + 
-      geom_rect(aes(xmin = as.Date("2024-07-15"), xmax = as.Date("2024-07-21"), 
-                    ymin = -Inf, ymax = Inf),
-                fill = "grey90", alpha = 0.5, inherit.aes = FALSE) +
-      geom_line()+ 
-      labs(x = NULL, y = "average integrated (0-5m)\ntemperature, (deg C)") +
-      scale_color_tableau() +
-      geom_abline(slope = 0, intercept = 14, linetype = 2) +
-      annotate("text", x = as.Date("2024-07-05"), y = 13.8, 
-               label = "Diatom Threshold (goal > 14°C, spring/early summer)", hjust = 0, size = 4) +
-      geom_line(data = previous_10_days_plus, inherit.aes = F, aes(x = date, y = mean_temp_int)) +
-      theme_bw()
-  }, res = 100)
+  ### Add footer ----
+  output$forecast_metadata <- renderText({
+    req(input$forecast_date)
+    paste("Forecast generated", format(input$forecast_date - days(1), "%B %d, %Y"),
+          "— data with GREY in background is forecasted.")
+  })
   
 }
