@@ -14,6 +14,8 @@ model_submodule/model_dev/baseline_model/data/*
 model_submodule/model_dev/baseline_model/dump/*
 model_submodule/model_dev/operational_model/data/*
 model_submodule/model_dev/operational_model/dump/three_ten/*
+## archive folders where unused models get stored
+**/archive/*
 
 ## pycache folders (from imp module)
 **/__pycache__/*
