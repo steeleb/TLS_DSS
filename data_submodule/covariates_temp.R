@@ -73,7 +73,7 @@ covariates_temp <- list(
     }
   ),
   
-  # we need daily summaries of these for the model
+  # we need daily summaries of these for view
   tar_target(
     name = met_daily,
     command = {
@@ -108,6 +108,63 @@ covariates_temp <- list(
     name = save_met_daily,
     command = write_csv(x = met_daily, file = "DSS_Shiny/www/daily_met.csv")
   ),
+  
+  
+  # and a different summary for modeling
+  tar_target(
+    name = met_daily_for_model,
+    command = {   
+      map2(.x = list(c(22, 23, 00), #list of hours
+                     c(01, 02, 03),
+                     c(04, 05, 06),
+                     c(07, 08, 09),
+                     c(10, 11, 12),
+                     c(13, 12, 15),
+                     c(16, 17, 18),
+                     c(19, 20, 21),
+                     c(22, 23, 00)),
+           .y = c("f000", #list of forecasts relative to UTC 06/MT 23
+                  "f003",
+                  "f006",
+                  "f009",
+                  "f012",
+                  "f015",
+                  "f018",
+                  "f021",
+                  "f024"),
+           .f = ~ {
+             met_QAQC %>% 
+               filter(hour(datetime) %in% .x) %>% 
+               # in cases of the control initialization, we need to maniputlate the date to match the following day
+               mutate(date = case_when(.y == "f000" & hour(datetime) > 1 ~ as_date(datetime) + days(1),
+                                       # and the opposite for the inclusion of time in the next day (00) that should be part of this one
+                                       .y == "f024" & hour(datetime) < 1 ~ as_date(datetime) - days(1),
+                                       .default = as_date(datetime))) %>% 
+               summarize(value = mean(value),
+                         .by = c(date, parameter)) %>% 
+               filter(parameter %in% c("Air_Temperature_Avg", #t2m
+                                       "Relative_Humidity_Avg", # rel humidity as stand-in for precip
+                                       "Wind_Speed_Avg", #u10/v10 to wind conversion
+                                       "Solar_Radiation_Total")) %>%  #swrf/lwrf
+               pivot_wider(names_from = parameter,
+                           values_from = value) %>% 
+               rename(air_temp = Air_Temperature_Avg,
+                      ave_wind = Wind_Speed_Avg,
+                      rel_hum = Relative_Humidity_Avg,
+                      solar_rad = Solar_Radiation_Total) %>% 
+               mutate(fcast = .y)
+           }
+      ) %>% 
+        bind_rows()
+    }  
+  ), 
+  
+  # save for use in Shiny
+  tar_target(
+    name = save_met_daily_model,
+    command = write_csv(x = met_daily_for_model, file = "DSS_Shiny/www/daily_met_for_model.csv")
+  ),
+  
   
   ## forecast data ----
   
