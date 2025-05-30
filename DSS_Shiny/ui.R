@@ -24,7 +24,7 @@ ui <- page_navbar(
       p("The 'Underlying Data' tab is essentially the data/database submodule that
         stores data. Within the context of the UI, the data used to inform the 
         model and figures can be queried from this tab."),
-      p("The 'Previous 30 Day Trends' provides figures of a subset of parameter
+      p("The 'Previous 30 Day Trends' tab presents daily time series figures of parameter subsets for the preceding 30 days, the end date of which users can change with the dropdown menu to the left."
         for the previous 30 days from a forecast date selected at the left-hand
         side of the screen."),
       p("The 'Forecast Panel' tab displays the previous 10 days of water temperature
