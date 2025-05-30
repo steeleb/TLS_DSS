@@ -250,14 +250,17 @@ server <- function(input, output, session) {
   # FORECAST PANEL ----
   
   # read in data
-  control <- read_csv("www/forecast/forecasted_temp_control_collated.csv") %>%
+  zero <- read_csv("www/forecast_operational/forecasted_temp_zero_collated.csv") %>%
+    mutate(regime = "zero")
+  control <- read_csv("www/forecast_operational/forecasted_temp_control_collated.csv") %>%
     mutate(regime = "control")
-  static <- read_csv("www/forecast/forecasted_temp_static_collated.csv") %>%
+  static <- read_csv("www/forecast_operational/forecasted_temp_static_collated.csv") %>%
     mutate(regime = "static")
-  pulsing <- read_csv("www/forecast/forecasted_temp_pulsing_collated.csv") %>%
+  pulsing <- read_csv("www/forecast_operational/forecasted_temp_pulsing_collated.csv") %>%
     mutate(regime = "pulsing")
   
-  forecasts <- list("control" = control,
+  forecasts <- list("zero" = zero,
+                    "control" = control,
                     "static" = static,
                     "pulsing" = pulsing)
   

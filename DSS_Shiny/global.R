@@ -233,6 +233,7 @@ plot_pump_forecast <- function(obs_pump, date_of_forecast) {
     select(date, dow, act_pump_cfs = pump_cfs) %>% 
     mutate(observed = if_else(date < date_of_forecast, act_pump_cfs, NA_real_),
            control = if_else(date >= date_of_forecast, act_pump_cfs, NA_real_),
+           zero = if_else(date >= date_of_forecast, 0, NA_real_),
            static = if_else(date >= date_of_forecast, 220, NA_real_),
            pulsed = case_when(date >= date_of_forecast & dow %in% c("Sat", "Sun") ~ 220,
                               date >= date_of_forecast & !dow %in% c("Sat", "Sun") ~ 440,
@@ -241,7 +242,7 @@ plot_pump_forecast <- function(obs_pump, date_of_forecast) {
     pivot_longer(cols = observed:pulsed,
                  names_to = "regime",
                  values_to = "cfs") %>% 
-    mutate(regime = factor(regime, levels = c("observed", "control", "static", "pulsed")))
+    mutate(regime = factor(regime, levels = c("control", "pulsed", "static", "zero", "observed")))
   
   ggplot(prev_act, aes(x = date, y = cfs, fill = regime)) +
     geom_rect(aes(xmin = date_of_forecast, xmax = date_of_forecast + days(6),

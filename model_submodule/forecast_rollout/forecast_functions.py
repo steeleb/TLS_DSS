@@ -260,3 +260,40 @@ def rollout_forecast(data, fore_date, m1, m2, m3, m4):
 
     return pd.concat(all_model_outputs, ignore_index=True)
 
+
+def rollout_forecast_operational(data, fore_date, m1, m2, m3, m4, m5):
+    fore_date = pd.to_datetime(fore_date)
+    data["forecast_date"] = pd.to_datetime(data["forecast_date"])
+    filtered_data = data[data["forecast_date"] == fore_date].copy()
+
+    all_model_outputs = []
+
+    model_map = {"1": m1, "2": m2, "3": m3, "4": m4, "5": m5}
+    forecasted_lookup = {model_num: {} for model_num in model_map}
+
+    for model_num, model in model_map.items():
+        for day_offset in range(7):
+            val_date = fore_date + pd.Timedelta(days=day_offset)
+            data_for_model = filtered_data.loc[filtered_data.index == val_date].copy()
+
+            # Use the prior day's forecasted value
+            if day_offset > 0:
+                prior_day = val_date - pd.Timedelta(days=1)
+                prior_vals = forecasted_lookup[model_num].get(prior_day)
+
+                if prior_vals is not None:
+                    for col in ["mean_1m_temp_degC", "mean_0_5m_temp_degC"]:
+                        data_for_model[f"{col}_m1"] = prior_vals[col]
+
+            # Only proceed if we have data for the current val_date
+            if data_for_model.empty:
+                continue
+
+            forecast_df = make_forecast(data_for_model, model, model_num, fore_date, val_date)
+            all_model_outputs.append(forecast_df)
+
+            # Store this forecast for future lag features
+            forecasted_lookup[model_num][val_date] = forecast_df.iloc[0]
+
+    return pd.concat(all_model_outputs, ignore_index=True)
+
