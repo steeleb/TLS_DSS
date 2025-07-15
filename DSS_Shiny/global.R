@@ -312,7 +312,7 @@ plot_forecast_int <- function(obs_temp_data, forecast_data, date_of_forecast) {
     labs(x = NULL, y = "average integrated (0-5m)\ntemperature, (deg C)") +
     scale_color_tableau() +
     scale_x_date(date_breaks = "1 day", date_labels = "%B %d", date_minor_breaks = "1 day") +
-    geom_line(data = previous_10_days, inherit.aes = F, aes(x = date, y = mean_temp_ns)) +
+    geom_line(data = previous_10_days, inherit.aes = F, aes(x = date, y = mean_temp_int)) +
     theme_bw() + 
     theme(axis.text.x = element_text(angle = 45, hjust = 1))
 }
