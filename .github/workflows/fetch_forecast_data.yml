@@ -1,0 +1,60 @@
+# Copy this file to .github/workflows/ for GitHub Actions to pick it up.
+
+name: Fetch SMR Forecasts
+
+on:
+  schedule:
+    - cron: '0 13 * * *'   # 13:00 UTC daily — GEFS 06Z available ~10-11Z; CBRFC uses prior day 15Z
+  workflow_dispatch:
+    inputs:
+      date:
+        description: 'Initialization date (YYYY-MM-DD); defaults to today'
+        required: false
+        default: ''
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r data_submodule/get_forecasts/requirements.txt
+
+      - name: Fetch GEFS forecast
+        env:
+          GEFS_OUTPUT_DIR: ${{ github.workspace }}/data_submodule/forecasts/GEFS_operational
+        run: |
+          mkdir -p "$GEFS_OUTPUT_DIR"
+          if [ -n "${{ github.event.inputs.date }}" ]; then
+            python data_submodule/get_forecasts/realtime_herbie_smr.py --date ${{ github.event.inputs.date }}
+          else
+            python data_submodule/get_forecasts/realtime_herbie_smr.py
+          fi
+
+      - name: Fetch CBRFC BAKC2 forecast
+        env:
+          CBRFC_OUTPUT_DIR: ${{ github.workspace }}/data_submodule/forecasts/CBRFC_operational
+        run: |
+          mkdir -p "$CBRFC_OUTPUT_DIR"
+          if [ -n "${{ github.event.inputs.date }}" ]; then
+            python data_submodule/get_forecasts/fetch_cbrfc_bakc2.py --date ${{ github.event.inputs.date }}
+          else
+            python data_submodule/get_forecasts/fetch_cbrfc_bakc2.py
+          fi
+
+      - name: Commit and push forecast data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data_submodule/forecasts/
+          git diff --cached --quiet && echo "No new forecast files to commit." || \
+            git commit -m "chore: add forecast data for ${{ github.event.inputs.date || 'today' }} [skip ci]"
+          git push
