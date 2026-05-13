@@ -5,7 +5,11 @@ temperature in Shadow Mountain Reservoir using forecasted weather and varying
 operational pumping regimes.
 
 The code in this repository is covered by the MIT use license. We request that 
-all downstream uses of this work be available to the public when possible.
+all downstream uses of this work be available to the public when possible. During
+development of the code in this repository, AI (ChatGPT) was used to help create 
+the architecture for the Shiny App and was also used to help with coding the 
+rollout of the forecast in Python, most code was modified in part or whole after 
+creation by ChatGPT.
 
 Repository contact: B Steele (b dot steele at colostate dot edu)
 
@@ -79,3 +83,39 @@ basis.
 
 *Figure 3. Sketch of the TLS DSS dialog user interface*
 
+## Repository Function
+
+This repository is built using {targets} infrastructure. To run the workflow 
+and update the underlying data, use the command `targets::tar_make()` in the R
+console. 
+
+## Shiny App
+
+This repository includes code to deploy a shiny app. The app can be accessed 
+[here](https://geocentroid.shinyapps.io/TLS-DSS/). At this time, the App must be 
+manually updated, but updates will be automated within the {targets} pipeline 
+in the future.
+
+Manual update of the app can be triggered at the console using the following 
+command:
+
+```
+rsconnect::deployApp("DSS_Shiny/", account = "geocentroid", appName = "TLS-DSS")
+```
+
+## Python modeling virtual environment
+
+conda create --name env_TLS_DSS python=3.10.10
+conda activate env_TLS_DSS
+conda install -c apple -c conda-forge -c nodefaults tensorflow-deps
+conda install tensorflow
+python -m pip install tensorflow-macos==2.10.0
+python -m pip install tensorflow-metal==0.6.0
+pip install tensorflow-probability==0.15 silence-tensorflow
+conda install numpy scipy matplotlib scikit-learn jupyterlab
+pip install pandas statsmodels icecream palettable seaborn progressbar2 tabulate isort
+pip install tqdm pydot graphviz
+pip install -U scikit-image
+pip install shap
+conda install pandas
+pip install chardet

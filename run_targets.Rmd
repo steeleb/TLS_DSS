@@ -1,0 +1,78 @@
+---
+title: "Run Targets - Three Lakes System Decision Support System pipeline"
+---
+
+# Purpose
+
+This script loads all necessary packages to run the {targets} pipeline for the
+Three Lakes System Decision Support System (TLS_DSS) then runs it! This R 
+Markdown document is not meant to be "knit", rather to walk the user through
+the process of setting up and running this workflow. 
+
+
+## Prerequsites
+
+There are a number of packages required for this workflow. First, we install 
+the necessary packages using a `package_installer()` custom function.
+
+Define package installer function
+
+```{r package_installer}
+package_installer <- function(x) {
+  if (x %in% installed.packages()) {
+    print(paste0("{", x ,"} package is already installed."))
+    } else {
+      install.packages(x, repos = "http://cran.us.r-project.org")
+      print(paste0("{", x ,"} package has been installed."))
+    }
+  }
+```
+
+Check for packages required to run this workflow, install them if not already
+present. 
+
+```{r walk_package_installer}
+packages <- c("crew",
+              "httr2",
+              "rvest",
+              "tarchetypes",
+              "targets",
+              "tidyverse",
+              "zoo")
+
+# note we use base-r lapply and not map since tidy is not loaded (and possibly
+# not installed) yet
+lapply(packages, package_installer)
+```
+
+
+## Run the targets pipeline and output a network graph.
+
+This workflow currently uses 6 cores via the crew worker from {targets}. Some
+targets are manually set to not use parallel processing using `deployment = "main"`
+in the definition of a target. 
+
+This code chunk will inform you of how many cores are available on your computer,
+if the number of cores is the same or less than 6, you should change the workers
+argument in the _targets.R file ~ line 10 to be fewer than those detected by the
+following code chunk:
+
+```{r}
+parallel::detectCores()
+```
+
+And this code chunk will run the pipeline:
+
+```{r run_targets}
+library(targets)
+
+tar_make()
+```
+
+
+### Create a network diagram of the workflow.
+
+```{r see_targets_net}
+tar_visnetwork()
+```
+
