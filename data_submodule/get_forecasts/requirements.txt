@@ -1,0 +1,6 @@
+herbie-data
+pandas
+xarray
+cfgrib
+eccodes
+requests
