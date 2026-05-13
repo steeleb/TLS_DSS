@@ -66,7 +66,7 @@ ui <- page_navbar(
   
   # Dialog Submodule ----
   nav_panel(
-    title = "Previoius 30 Day Trends",
+    title = "Previous 30 Day Trends",
     card(
       layout_sidebar(
         sidebar = sidebar(
