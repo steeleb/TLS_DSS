@@ -15,11 +15,13 @@ on:
 jobs:
   fetch:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
@@ -48,7 +50,11 @@ jobs:
             python data_submodule/get_forecasts/fetch_cbrfc_bakc2.py
           fi
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: forecasts-${{ github.event.inputs.date || 'today' }}
-          path: data_submodule/forecasts
+      - name: Commit and push forecast data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data_submodule/forecasts/
+          git diff --cached --quiet && echo "No new forecast files to commit." || \
+            git commit -m "chore: add forecast data for ${{ github.event.inputs.date || 'today' }} [skip ci]"
+          git push
