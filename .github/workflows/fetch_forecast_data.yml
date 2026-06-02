@@ -4,7 +4,11 @@ name: Fetch SMR Forecasts
 
 on:
   schedule:
+<<<<<<< HEAD
     - cron: '0 13 * * *'   # 13:00 UTC daily — GEFS 06Z available ~10-11Z; CBRFC uses prior day 15Z
+=======
+    - cron: '0 11 * * *'   # 11:00 UTC daily — GEFS 06Z available ~10-11Z; CBRFC uses prior day 15Z
+>>>>>>> e67f6e0a19311441ad3d9cebd25667cf5e3aa8c7
   workflow_dispatch:
     inputs:
       date:
@@ -34,7 +38,7 @@ jobs:
         run: |
           mkdir -p "$GEFS_OUTPUT_DIR"
           if [ -n "${{ github.event.inputs.date }}" ]; then
-            python data_submodule/get_forecasts/realtime_herbie_smr.py --date ${{ github.event.inputs.date }}
+            python data_submodule/get_forecasts/realtime_herbie_smr.py --date "${{ github.event.inputs.date }}"
           else
             python data_submodule/get_forecasts/realtime_herbie_smr.py
           fi
