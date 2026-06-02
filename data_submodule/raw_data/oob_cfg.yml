@@ -1,0 +1,80 @@
+depth_m:
+  SM_DAM:
+    max: 7.5
+  SM_MID:
+    max: 6.5
+  WCR:
+    max: 24.5
+temp_C:
+  SM_MID:
+    limit_min: -5
+    limit_max: 30
+  SM_DAM:
+    limit_min: -5
+    limit_max: 30
+  WCR:
+    limit_min: -5
+    limit_max: 30
+cond_uscm:
+  SM_MID:
+    limit_min: 20
+    limit_max: 80
+  SM_DAM:
+    limit_min: 20
+    limit_max: 100
+specCond_uscm:
+  WCR:
+    limit_min: 70
+    limit_max: 140
+do_mgl:
+  SM_MID:
+    limit_min: 0
+    limit_max: 12
+  SM_DAM:
+    limit_min: 0
+    limit_max: 14
+  WCR:
+    limit_min: 0
+    limit_max: 12
+pH:
+  SM_MID:
+    limit_min: 5
+    limit_max: 10
+  SM_DAM: 
+    limit_min: 5
+    limit_max: 11 
+  WCR:
+    limit_min: 6
+    limit_max: 10
+turb_NTU:
+  SM_MID:
+    limit_min: 0
+    limit_max: 50
+  SM_DAM:
+    limit_min: 0
+    limit_max: 100
+  WCR:
+    limit_min: 0
+    limit_max: 1200
+chla_RFU:
+  SM_MID:
+    limit_min: 0
+    limit_max: 30
+  SM_DAM:
+    limit_min: 0
+    limit_max: 50
+  WCR:
+    limit_min: 0.01
+    limit_max: 50
+bgalgae_RFU:
+  SM_MID:
+    limit_min: 0
+    limit_max: 2
+  SM_DAM:
+    limit_min: 0
+    limit_max: 10
+phyco_RFU:
+  WCR:
+    limit_min: 0.01
+    limit_max: 10
+

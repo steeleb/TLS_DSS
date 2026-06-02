@@ -4,11 +4,8 @@ name: Fetch SMR Forecasts
 
 on:
   schedule:
-<<<<<<< HEAD
-    - cron: '0 13 * * *'   # 13:00 UTC daily — GEFS 06Z available ~10-11Z; CBRFC uses prior day 15Z
-=======
     - cron: '0 11 * * *'   # 11:00 UTC daily — GEFS 06Z available ~10-11Z; CBRFC uses prior day 15Z
->>>>>>> e67f6e0a19311441ad3d9cebd25667cf5e3aa8c7
+    - cron: '0 12 * * *'   # 14:00 UTC daily — backup run if 11Z fetch failed or data was not yet available
   workflow_dispatch:
     inputs:
       date:
@@ -33,32 +30,58 @@ jobs:
         run: pip install -r data_submodule/get_forecasts/requirements.txt
 
       - name: Fetch GEFS forecast
+        uses: nick-fields/retry@v3
         env:
           GEFS_OUTPUT_DIR: ${{ github.workspace }}/data_submodule/forecasts/GEFS_operational
-        run: |
-          mkdir -p "$GEFS_OUTPUT_DIR"
-          if [ -n "${{ github.event.inputs.date }}" ]; then
-            python data_submodule/get_forecasts/realtime_herbie_smr.py --date "${{ github.event.inputs.date }}"
-          else
-            python data_submodule/get_forecasts/realtime_herbie_smr.py
-          fi
+        with:
+          timeout_minutes: 2
+          max_attempts: 2
+          retry_wait_seconds: 60
+          command: |
+            mkdir -p "$GEFS_OUTPUT_DIR"
+            if [ -n "${{ github.event.inputs.date }}" ]; then
+              python data_submodule/get_forecasts/realtime_herbie_smr.py --date "${{ github.event.inputs.date }}"
+            else
+              python data_submodule/get_forecasts/realtime_herbie_smr.py
+            fi
 
       - name: Fetch CBRFC BAKC2 forecast
+        uses: nick-fields/retry@v3
         env:
           CBRFC_OUTPUT_DIR: ${{ github.workspace }}/data_submodule/forecasts/CBRFC_operational
+        with:
+          timeout_minutes: 2
+          max_attempts: 2
+          retry_wait_seconds: 60
+          command: |
+            mkdir -p "$CBRFC_OUTPUT_DIR"
+            if [ -n "${{ github.event.inputs.date }}" ]; then
+              python data_submodule/get_forecasts/fetch_cbrfc_bakc2.py --date "${{ github.event.inputs.date }}"
+            else
+              python data_submodule/get_forecasts/fetch_cbrfc_bakc2.py
+            fi
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: 'release'
+
+      - name: Install R packages
         run: |
-          mkdir -p "$CBRFC_OUTPUT_DIR"
-          if [ -n "${{ github.event.inputs.date }}" ]; then
-            python data_submodule/get_forecasts/fetch_cbrfc_bakc2.py --date ${{ github.event.inputs.date }}
-          else
-            python data_submodule/get_forecasts/fetch_cbrfc_bakc2.py
-          fi
+          Rscript -e "install.packages(c('targets', 'tarchetypes', 'crew', 'tidyverse', 'httr2', 'rvest', 'data.table', 'yaml', 'dataRetrieval'), repos = 'https://cloud.r-project.org')"
+
+      - name: Run targets pipeline
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 2
+          max_attempts: 2
+          retry_wait_seconds: 60
+          command: Rscript -e "targets::tar_make()"
 
       - name: Commit and push forecast data
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data_submodule/forecasts/
+          git add data_submodule/forecasts/ data_submodule/raw_data/target_output/
           git diff --cached --quiet && echo "No new forecast files to commit." || \
             git commit -m "chore: add forecast data for ${{ github.event.inputs.date || 'today' }} [skip ci]"
           git push
