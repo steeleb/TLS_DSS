@@ -22,10 +22,10 @@ tar_source(files = c(
 ))
 
 # Full {targets} list (from above files)
-c(buoy,
-  chipmunk,
-  east_inlet,
-  farr_pump,
-  north_fork,
-  north_inlet,
-  tunnel_delivery)
+c(buoy_tar,
+  chipmunk_tar,
+  east_inlet_tar,
+  farr_pump_tar,
+  north_fork_tar,
+  north_inlet_tar,
+  tunnel_delivery_tar)

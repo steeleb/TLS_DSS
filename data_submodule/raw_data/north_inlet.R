@@ -1,7 +1,7 @@
 # Source functions for this {targets} list
 tar_source("data_submodule/raw_data/src/")
 
-north_inlet <- list(
+north_inlet_tar <- list(
   tar_target(
     name = grand_north_inlet_tsid,
     command = get_kisters_ts_info(station_no = "FS-0046",
@@ -24,6 +24,17 @@ north_inlet <- list(
              q_cfs = as.numeric(value)) %>% 
       select(-c(datetime, value)),
     packages = c("httr2", "rvest", "tidyverse")
+  ),
+
+  tar_target(
+    name = grand_north_inlet_daily_csv,
+    command = {
+      path <- "data_submodule/raw_data/target_output/grand_north_inlet_daily.csv"
+      dir.create(dirname(path), showWarnings = FALSE, recursive = TRUE)
+      write_csv(grand_north_inlet_daily, path)
+      path
+    },
+    format = "file",
+    packages = "readr"
   )
 )
-  

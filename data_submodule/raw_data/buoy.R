@@ -1,7 +1,7 @@
 # Source functions for this {targets} list
 tar_source("data_submodule/raw_data/src/")
 
-buoy <- list(
+buoy_tar <- list(
   tar_target(
     name = SM_MID_buoy_tsid,
     command = get_kisters_ts_info(station = "FS-0081", 
@@ -13,10 +13,10 @@ buoy <- list(
   tar_target(
     name = SM_MID_buoy,
     command = get_kisters_ts_data(station = "FS-0081", 
-                                  ts_id = d_SM_MID_buoy_tsid$ts_id, 
-                                  param = d_SM_MID_buoy_tsid$stationparameter_name, 
+                                  ts_id = SM_MID_buoy_tsid$ts_id, 
+                                  param = SM_MID_buoy_tsid$stationparameter_name, 
                                   start_date = "2026-05-15", 
-                                  end_date = d_SM_MID_buoy_tsid$to, 
+                                  end_date = SM_MID_buoy_tsid$to, 
                                   datasource = 1) %>% 
       mutate(parameter = SM_MID_buoy_tsid$stationparameter_name),
     pattern = map(SM_MID_buoy_tsid),
@@ -46,5 +46,17 @@ buoy <- list(
                    yml_path = "data_submodule/raw_data/oob_cfg.yml")
     },
     packages = c("data.table", "tidyverse", "yaml")
+  ),
+
+  tar_target(
+    name = SM_MID_L1_csv,
+    command = {
+      path <- "data_submodule/raw_data/target_output/SM_MID_L1.csv"
+      dir.create(dirname(path), showWarnings = FALSE, recursive = TRUE)
+      write_csv(SM_MID_L1, path)
+      path
+    },
+    format = "file",
+    packages = "readr"
   )
 )

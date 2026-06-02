@@ -1,7 +1,7 @@
 # Source functions for this {targets} list
 tar_source("data_submodule/raw_data/src/")
 
-chipmunk <- list(
+chipmunk_tar <- list(
   
   tar_target(
     name = chipmunk_raw,
@@ -17,5 +17,17 @@ chipmunk <- list(
     name = chipmunk,
     command = harmonize_NWIS_stream(chipmunk_raw),
     packages = "tidyverse"
+  ),
+
+  tar_target(
+    name = chipmunk_csv,
+    command = {
+      path <- "data_submodule/raw_data/target_output/chipmunk.csv"
+      dir.create(dirname(path), showWarnings = FALSE, recursive = TRUE)
+      write_csv(chipmunk, path)
+      path
+    },
+    format = "file",
+    packages = "readr"
   )
 )

@@ -1,11 +1,11 @@
 # Source functions for this {targets} list
 tar_source("data_submodule/raw_data/src/")
 
-north_fork <- list(
+north_fork_tar <- list(
   tar_target(
     name = northfork_tsids,
     command = get_kisters_ts_info(station_no = "M-0009",
-                                params = "Q"),
+                                  params = "Q"),
     packages = c("tidyverse", "httr2", "rvest"),
     cue = tar_cue("always")
   ),
@@ -23,5 +23,17 @@ north_fork <- list(
       mutate(date = ymd(as.POSIXct(datetime, tz = "Etc/GMT+7")),
              value = as.numeric(value)),
     packages = c("tidyverse", "httr2", "rvest")
+  ),
+
+  tar_target(
+    name = northfork_daily_csv,
+    command = {
+      path <- "data_submodule/raw_data/target_output/northfork_daily.csv"
+      dir.create(dirname(path), showWarnings = FALSE, recursive = TRUE)
+      write_csv(northfork_daily, path)
+      path
+    },
+    format = "file",
+    packages = "readr"
   )
 )
