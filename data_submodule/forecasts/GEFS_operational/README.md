@@ -1,0 +1,1 @@
+Folder for GEFS operational forecasts for SMR, gathered daily in a GHA
