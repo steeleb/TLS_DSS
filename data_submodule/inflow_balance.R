@@ -129,10 +129,9 @@ inflow_water_balance <- list(
     name = chipmunk_data_daily,
     command = harmonize_NWIS_stream(chipmunk_raw) %>% 
       filter(parameter == "flow_cfs") %>% 
-      mutate(date = ymd(as.POSIXct(dateTime, tz = "Etc/GMT+7"))) %>% 
-      summarize(value = mean(value), 
-                .by = date) %>% 
-      filter(!is.na(date))
+      mutate(date = as_date(dateTime)) %>% 
+      summarize(chipmunk_cfs = mean(value, rm.na = T),
+                               .by = date)
   ),
   
   tar_target(

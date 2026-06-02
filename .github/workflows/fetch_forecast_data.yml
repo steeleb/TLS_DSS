@@ -4,7 +4,7 @@ name: Fetch SMR Forecasts
 
 on:
   schedule:
-    - cron: '0 13 * * *'   # 13:00 UTC daily — GEFS 06Z available ~10-11Z; CBRFC uses prior day 15Z
+    - cron: '0 11 * * *'   # 11:00 UTC daily — GEFS 06Z available ~10-11Z; CBRFC uses prior day 15Z
   workflow_dispatch:
     inputs:
       date:
