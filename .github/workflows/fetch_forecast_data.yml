@@ -45,7 +45,7 @@ jobs:
         run: |
           mkdir -p "$CBRFC_OUTPUT_DIR"
           if [ -n "${{ github.event.inputs.date }}" ]; then
-            python data_submodule/get_forecasts/fetch_cbrfc_bakc2.py --date ${{ github.event.inputs.date }}
+            python data_submodule/get_forecasts/fetch_cbrfc_bakc2.py --date "${{ github.event.inputs.date }}"
           else
             python data_submodule/get_forecasts/fetch_cbrfc_bakc2.py
           fi
