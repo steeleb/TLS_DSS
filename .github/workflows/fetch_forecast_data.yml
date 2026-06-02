@@ -34,7 +34,7 @@ jobs:
         run: |
           mkdir -p "$GEFS_OUTPUT_DIR"
           if [ -n "${{ github.event.inputs.date }}" ]; then
-            python data_submodule/get_forecasts/realtime_herbie_smr.py --date ${{ github.event.inputs.date }}
+            python data_submodule/get_forecasts/realtime_herbie_smr.py --date "${{ github.event.inputs.date }}"
           else
             python data_submodule/get_forecasts/realtime_herbie_smr.py
           fi
