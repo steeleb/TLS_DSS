@@ -6,7 +6,7 @@ buoy_tar <- list(
     name = SM_MID_buoy_tsid,
     command = get_kisters_ts_info(station = "FS-0081", 
                                   datasource = 1),
-    packages = c("httr2", "rvest", "tidyverse"),
+    packages = c("httr2", "rvest", "dplyr"),
     cue = tar_cue("always") # want to make sure this always updates
   ),
   
@@ -20,9 +20,9 @@ buoy_tar <- list(
                                   datasource = 1) %>% 
       mutate(parameter = SM_MID_buoy_tsid$stationparameter_name),
     pattern = map(SM_MID_buoy_tsid),
-    packages = c("httr2", "rvest", "tidyverse")
+    packages = c("httr2", "rvest", "dplyr", "purrr", "lubridate")
   ),
-  
+
   # clean data using out-of-range settings and any errant data 
   tar_target(
     name = SM_MID_L1,
@@ -45,7 +45,7 @@ buoy_tar <- list(
       clean_SM_MID(SM_MID_data = reformatted_buoy, 
                    yml_path = "data_submodule/raw_data/oob_cfg.yml")
     },
-    packages = c("data.table", "tidyverse", "yaml")
+    packages = c("dplyr", "tidyr", "purrr", "tibble", "lubridate", "yaml")
   ),
 
   tar_target(

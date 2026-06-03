@@ -7,7 +7,7 @@ farr_pump_tar <- list(
     command = get_kisters_ts_info(station_no = "EX-0054",
                                   params = "Q_Pump",
                                   datasource = 1),
-    packages = c("tidyverse", "httr2", "rvest"),
+    packages = c("httr2", "rvest", "dplyr"),
     cue = tar_cue("always")
   ),
   
@@ -22,7 +22,7 @@ farr_pump_tar <- list(
       filter(!is.na(datetime)) %>% 
       mutate(date = ymd(as.POSIXct(datetime, tz = "Etc/GMT+7")),
              value = as.numeric(value)),
-    packages = c("tidyverse", "httr2", "rvest"),
+    packages = c("httr2", "rvest", "dplyr", "purrr", "lubridate"),
   ),
 
   tar_target(

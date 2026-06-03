@@ -9,14 +9,14 @@ chipmunk_tar <- list(
                                     start_date = "2026-05-15T00:00",
                                     end_date = Sys.Date(),
                                     tz = "MST"),
-    packages = c("tidyverse", "dataRetrieval")
+    packages = c("dataRetrieval")
   ),
   
   # and pass the harmonize function to re-orient data
   tar_target(
     name = chipmunk,
     command = harmonize_NWIS_stream(chipmunk_raw),
-    packages = "tidyverse"
+    packages = c("dplyr", "stringr", "tidyr")
   ),
 
   tar_target(

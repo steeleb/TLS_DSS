@@ -14,7 +14,7 @@ tunnel_delivery_tar <- list(
       mutate(date = ymd(as.POSIXct(datetime, tz = "Etc/GMT+7")),
              value = as.numeric(value)) %>%
       select(date, value),
-    packages = c("tidyverse", "httr2", "rvest")
+    packages = c("httr2", "rvest", "dplyr", "purrr", "lubridate")
   ),
 
   tar_target(

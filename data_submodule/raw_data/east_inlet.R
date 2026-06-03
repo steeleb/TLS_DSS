@@ -8,7 +8,7 @@ east_inlet_tar <- list(
                                   final = TRUE,
                                   params = "Q",
                                   datasource = 1),
-    packages = c("tidyverse", "httr2", "rvest"),
+    packages = c("httr2", "rvest", "dplyr"),
     cue = tar_cue("always")
   ),
   
@@ -25,7 +25,7 @@ east_inlet_tar <- list(
       mutate(date = format(ymd_hms(datetime), "%Y-%m-%d"),
              q_cfs = as.numeric(value)) %>% 
       select(-c(datetime, value)),
-    packages = c("httr2", "rvest", "tidyverse")
+    packages = c("httr2", "rvest", "dplyr", "purrr", "lubridate")
   ),
 
   tar_target(

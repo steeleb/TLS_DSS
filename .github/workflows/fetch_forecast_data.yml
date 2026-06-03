@@ -67,10 +67,14 @@ jobs:
       - uses: r-lib/actions/setup-r@v2
         with:
           r-version: 'release'
+          use-public-rspm: true          # binaries on Linux
 
-      - name: Install R packages
-        run: |
-          Rscript -e "install.packages(c('targets', 'tarchetypes', 'crew', 'tidyverse', 'httr2', 'rvest', 'data.table', 'yaml', 'dataRetrieval'), repos = 'https://cloud.r-project.org')"
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          packages: |
+            targets, fs, tarchetypes, crew,
+            dplyr, purrr, lubridate, readr, stringr, tibble, tidyr,
+            httr2, rvest, yaml, dataRetrieval
 
       - name: Run targets pipeline
         uses: nick-fields/retry@v3

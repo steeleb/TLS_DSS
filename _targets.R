@@ -6,7 +6,6 @@ library(tarchetypes)
 
 # Set global {targets} options:
 tar_option_set(
-  packages = c("tidyverse"),
   controller = crew::crew_controller_local(workers = 6, seconds_idle = 60)
 )
 

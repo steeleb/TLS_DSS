@@ -6,7 +6,7 @@ north_fork_tar <- list(
     name = northfork_tsids,
     command = get_kisters_ts_info(station_no = "M-0009",
                                   params = "Q"),
-    packages = c("tidyverse", "httr2", "rvest"),
+    packages = c("httr2", "rvest", "dplyr"),
     cue = tar_cue("always")
   ),
   
@@ -22,7 +22,7 @@ north_fork_tar <- list(
       filter(!is.na(datetime)) %>% 
       mutate(date = ymd(as.POSIXct(datetime, tz = "Etc/GMT+7")),
              value = as.numeric(value)),
-    packages = c("tidyverse", "httr2", "rvest")
+    packages = c("httr2", "rvest", "dplyr", "purrr", "lubridate")
   ),
 
   tar_target(
