@@ -2,14 +2,11 @@
 
 from herbie import FastHerbie
 import pandas as pd
-import xarray as xr
 import argparse
 import os
 import sys
 import time
 from datetime import date
-
-xr.set_options(use_new_combine_kwarg_defaults=True)
 
 # --- Constants -----------------------------------------------------------
 

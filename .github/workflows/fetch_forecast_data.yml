@@ -3,6 +3,9 @@
 name: Fetch SMR Forecasts
 
 on:
+  push:
+    branches:
+      - main
   schedule:
     - cron: '0 11 * * *'   # 11:00 UTC daily — GEFS 06Z available ~10-11Z; CBRFC uses prior day 15Z
     - cron: '0 12 * * *'   # 14:00 UTC daily — backup run if 11Z fetch failed or data was not yet available
