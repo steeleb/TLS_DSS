@@ -77,7 +77,7 @@ basis.
 
 *Figure 2. Sketch of decision support submodules for the TLS DSS*
 
-## DSS Dialog Sketch
+## DSS Knowledge Engine
 
 ![DSS Dialog](https://github.com/user-attachments/assets/f8439a9d-76f7-438f-ae06-492d987514c4)
 
