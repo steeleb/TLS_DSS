@@ -7,8 +7,8 @@ on:
     branches:
       - main
   schedule:
-    - cron: '0 11 * * *'   # 11:00 UTC daily — GEFS 06Z available ~10-11Z; CBRFC uses prior day 15Z
-    - cron: '0 12 * * *'   # 14:00 UTC daily — backup run if 11Z fetch failed or data was not yet available
+    - cron: '45 10 * * *'   # 10:45 UTC daily — GEFS 06Z available ~10-11Z; CBRFC uses prior day 15Z
+    - cron: '45 11 * * *'   # 11:45 UTC daily — backup run if 11Z fetch failed or data was not yet available
   workflow_dispatch:
     inputs:
       date:
@@ -37,7 +37,7 @@ jobs:
         env:
           GEFS_OUTPUT_DIR: ${{ github.workspace }}/data_submodule/forecasts/GEFS_operational
         with:
-          timeout_minutes: 2
+          timeout_minutes: 10
           max_attempts: 2
           retry_wait_seconds: 60
           command: |
@@ -53,7 +53,7 @@ jobs:
         env:
           CBRFC_OUTPUT_DIR: ${{ github.workspace }}/data_submodule/forecasts/CBRFC_operational
         with:
-          timeout_minutes: 2
+          timeout_minutes: 5
           max_attempts: 2
           retry_wait_seconds: 60
           command: |
