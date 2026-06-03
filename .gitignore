@@ -22,3 +22,4 @@ model_submodule/model_dev/operational_model/dump/three_ten/*
 
 ## DS_store
 *.DS_Store
+.positai

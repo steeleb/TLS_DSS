@@ -26,6 +26,7 @@ tunnel_delivery_tar <- list(
       path
     },
     format = "file",
-    packages = "readr"
+    packages = "readr",
+    cue = tar_cue(file = FALSE)
   )
 )
