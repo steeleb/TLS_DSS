@@ -669,8 +669,10 @@ with st.sidebar:
     # Load static data (cached)
     abt_dict, ei_dict, ni_dict, bakc2_df, coeff_nf, coeff_ei, coeff_ni = load_data()
 
-    # Date range from available GEFS operational files
+    # Date range from available GEFS operational files, restricted to Jun 1–Sep 30
     gefs_files = sorted(GEFS_DIR.glob('GEFS_p25_*.csv'))
+    gefs_files = [f for f in gefs_files
+                  if 6 <= pd.Timestamp(f.stem.replace('GEFS_p25_', '')).month <= 9]
     if gefs_files:
         min_date = pd.Timestamp(gefs_files[0].stem.replace('GEFS_p25_', '')).date()
         max_date = pd.Timestamp(gefs_files[-1].stem.replace('GEFS_p25_', '')).date()
@@ -827,10 +829,18 @@ _sc_fingerprint = (
 
 # ── Main area ─────────────────────────────────────────────────────────────────
 
-st.markdown(
-    "<h1 style='line-height:1.2; margin-bottom:0'>Shadow Mountain Reservoir<br>7-Day Temperature Forecast</h1>",
-    unsafe_allow_html=True,
-)
+col_title, col_btn = st.columns([5, 1])
+with col_title:
+    st.markdown(
+        "<h1 style='line-height:1.2; margin-bottom:0'>Shadow Mountain Reservoir<br>7-Day Temperature Forecast</h1>",
+        unsafe_allow_html=True,
+    )
+with col_btn:
+    st.link_button(
+        "Contact / Suggest",
+        "mailto:b.steele@colostate.edu?subject=SMR%20Forecast%20App%20Feedback",
+        use_container_width=True,
+    )
 
 if not can_run and not gefs_ok:
     st.info("Select a date that has an available GEFS operational file to enable the forecast.")
