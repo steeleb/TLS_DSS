@@ -61,7 +61,7 @@ def load_models():
 
 @st.cache_data(ttl=3600)
 def load_data():
-    # File names: TLS_DSS drops the 'e_' prefix; internal formats are identical
+    # File names:
     abt = pd.read_csv(RAW_DIR / 'adams_tunnel_data.csv',         parse_dates=['date'])
     ei  = pd.read_csv(RAW_DIR / 'grand_east_inlet_daily.csv',    parse_dates=['date'])
     ni  = pd.read_csv(RAW_DIR / 'grand_north_inlet_daily.csv',   parse_dates=['date'])
@@ -70,8 +70,7 @@ def load_data():
     ei_dict  = dict(zip(ei['date'],  ei['q_cfs']))
     ni_dict  = dict(zip(ni['date'],  ni['q_cfs']))
 
-    # CBRFC: per-day files (CBRFC_BAKC2_YYYY-MM-DD.csv); normalize columns to
-    # match the existing app logic (issue_date / date / flow_cfs)
+    # CBRFC: per-day files (CBRFC_BAKC2_YYYY-MM-DD.csv)
     cbrfc_files = sorted(CBRFC_DIR.glob('CBRFC_BAKC2_*.csv'))
     if cbrfc_files:
         frames = []
@@ -125,7 +124,7 @@ def load_realtime_state(init_date):
     temp_1m_ser   = buoy_raw[buoy_raw['depth_m'] <= 1.0].groupby('date')['temp_C'].mean()
     temp_0_5m_ser = buoy_raw[buoy_raw['depth_m'] <= 5.0].groupby('date')['temp_C'].mean()
 
-    # ── Past GEFS control-member noon forecasts ───────────────────────────────
+    # ── Past GEFS control-member noon forecasts for "observed" ───────────────────────────────
     gefs_records = {}
     cutoff = ref - pd.Timedelta(days=lookback)
     for gf in sorted(GEFS_DIR.glob('GEFS_p25_*.csv')):
@@ -180,7 +179,7 @@ def load_realtime_state(init_date):
     return pd.Series(state), obs_df
 
 
-# ── Core model logic (matches notebook exactly) ───────────────────────────────
+# ── Core model logic  ───────────────────────────────
 
 def _apply_reg(bakc2_cfs, coeff_df, month_abbrev):
     """Apply monthly linear regression: flow = intercept + slope * bakc2_cfs."""
@@ -579,7 +578,7 @@ def make_unified_figure(forecast_df, obs_df, abt_dict, init_date, scenario_names
 def compute_water_balance(pump_schedule, abt_schedule, ei_flows, ni_flows, nf_flows, init_date):
     """Per-day SMR water balance (all flows in cfs).
 
-    SMR volume is constant; if total_inflow < ABT, a volume deficit occurs.
+    SMR/GL volume is assumed constant; if total_inflow < ABT, a volume deficit occurs.
     SMR outflow = total_inflow - ABT (excludes chipmunk, which is an
     intermediate gauge, not an independent source).
     ei_flows/ni_flows/nf_flows are dicts keyed by horizon h=1..7.
