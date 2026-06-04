@@ -42,8 +42,9 @@ NEEDED_HORIZONS = set(NOON_HORIZONS.values())
 GEFS_VARS       = ['gefs_temp_degC', 'gefs_wind_mps', 'gefs_sol_rad_Wpm2']
 
 # Okabe-Ito colorblind-safe palette (Nature Methods 2011)
-SCENARIO_COLORS = ['#E69F00', '#56B4E9', '#009E73', '#CC79A7']
-BASELINE_COLOR  = '#888888'
+SCENARIO_COLORS       = ['#E69F00', '#56B4E9', '#009E73', '#CC79A7']
+SCENARIO_COLORS_LIGHT = ['#F4CC7E', '#ABD9F4', '#80CEBC', '#E5BCD4']  # pastel pairs for 0–5m depth
+BASELINE_COLOR        = '#888888'
 DEFAULT_NAMES   = ['Scenario A', 'Scenario B', 'Scenario C', 'Scenario D']
 
 
@@ -58,7 +59,7 @@ def load_models():
     return cv_models, cv_scalers, feature_cols
 
 
-@st.cache_data
+@st.cache_data(ttl=3600)
 def load_data():
     # File names: TLS_DSS drops the 'e_' prefix; internal formats are identical
     abt = pd.read_csv(RAW_DIR / 'adams_tunnel_data.csv',         parse_dates=['date'])
@@ -91,7 +92,7 @@ def load_data():
     return abt_dict, ei_dict, ni_dict, bakc2_df, coeff_nf, coeff_ei, coeff_ni
 
 
-@st.cache_data
+@st.cache_data(ttl=3600)
 def load_realtime_state(init_date):
     """Read raw TLS_DSS files to build lag features and a recent-obs DataFrame.
 
@@ -146,7 +147,9 @@ def load_realtime_state(init_date):
     for _s in (nf_ser, pump_ser, chip_ser, temp_1m_ser, temp_0_5m_ser):
         if _s.index.tz is not None:
             _s.index = _s.index.tz_convert(None)
-    obs_df = pd.concat([nf_ser, pump_ser, chip_ser], axis=1)
+    obs_df = pd.concat([nf_ser, pump_ser, chip_ser,
+                        temp_1m_ser.rename('temp_1m_degC'),
+                        temp_0_5m_ser.rename('temp_0_5m_degC')], axis=1)
     if not gefs_df.empty:
         obs_df = obs_df.join(gefs_df, how='outer')
     else:
@@ -407,11 +410,15 @@ def make_met_flow_figure(gefs_d, obs_df, abt_dict, ei_dict, ni_dict,
     ax.grid(True, alpha=0.3, axis='y')
 
     # ── Panel 2: NF / EI / NI inflows ────────────────────────────────────────
-    all_dates = obs_dates.append(fc_dates)
     ax = axes[1]
-    ax.plot(all_dates, nf_obs + nf_fc, color='#009E73', linewidth=2, label='NF')
-    ax.plot(all_dates, ei_obs + ei_fc, color='#D55E00', linewidth=2, label='EI')
-    ax.plot(all_dates, ni_obs + ni_fc, color='#CC79A7', linewidth=2, label='NI')
+    for _lbl, _color, _obs_vals, _fc_vals in [
+        ('NF', '#009E73', nf_obs, nf_fc),
+        ('EI', '#D55E00', ei_obs, ei_fc),
+        ('NI', '#CC79A7', ni_obs, ni_fc),
+    ]:
+        ax.plot(obs_dates, _obs_vals, color=_color, linewidth=2, label=_lbl)
+        ax.plot([obs_dates[-1], *fc_dates], [_obs_vals[-1], *_fc_vals],
+                color=_color, linewidth=2, linestyle='--')
     ax.axvline(vline_x, **vline_kw)
     ax.set_ylabel('Flow (cfs)')
     ax.legend(fontsize=8, ncol=2)
@@ -420,7 +427,9 @@ def make_met_flow_figure(gefs_d, obs_df, abt_dict, ei_dict, ni_dict,
     # ── Panels 3–5: Meteorological inputs ────────────────────────────────────
     def _met_panel(ax, obs_vals, fc_mean, fc_std, ylabel, color):
         arr_m = np.array(fc_mean); arr_s = np.array(fc_std)
-        ax.plot(all_dates, obs_vals + list(arr_m), color=color, linewidth=2, label='GEFS (mean)')
+        ax.plot(obs_dates, obs_vals, color=color, linewidth=2, label='GEFS (mean)')
+        ax.plot([obs_dates[-1], *fc_dates], [obs_vals[-1], *arr_m],
+                color=color, linewidth=2, linestyle='--')
         ax.fill_between(fc_dates, arr_m - arr_s, arr_m + arr_s, color=color, alpha=0.2, label='±1 std (forecast)')
         ax.axvline(vline_x, **vline_kw)
         ax.set_ylabel(ylabel)
@@ -432,12 +441,22 @@ def make_met_flow_figure(gefs_d, obs_df, abt_dict, ei_dict, ni_dict,
     _met_panel(axes[4], wind_obs, fc_wind_mean, fc_wind_std, 'Wind speed (m s⁻¹)','#56B4E9')
 
     axes[4].set_xlabel('Date')
+    axes[-1].xaxis.set_major_locator(mdates.DayLocator())
+    axes[-1].xaxis.set_major_formatter(mdates.DateFormatter('%b %-d'))
+    plt.setp(axes[-1].get_xticklabels(), rotation=45, ha='right')
     fig.tight_layout()
     return fig
 
 
-def make_figure(forecast_df, init_date, scenario_names, pump_schedules=None, abt_schedules=None,
-                persist_pump_sch=None, persist_abt_sch=None):
+def make_unified_figure(forecast_df, obs_df, abt_dict, init_date, scenario_names,
+                        pump_schedules, abt_schedules,
+                        persist_pump_sch=None, persist_abt_sch=None):
+    today = pd.Timestamp.today().normalize()
+
+    obs_end   = init_date - pd.Timedelta(days=1)
+    obs_start = obs_end - pd.Timedelta(days=6)
+    obs_dates = pd.date_range(obs_start, obs_end, freq='D')
+
     target_dates = sorted(forecast_df['target_date'].unique())
     all_scenarios = forecast_df['scenario'].unique()
 
@@ -447,70 +466,112 @@ def make_figure(forecast_df, init_date, scenario_names, pump_schedules=None, abt
     if 'Persistence' in all_scenarios:
         color_map['Persistence'] = BASELINE_COLOR
 
-    fig, axes = plt.subplots(3, 1, figsize=(11, 11), sharex=True,
-                              gridspec_kw={'height_ratios': [2, 2, 1.5]})
+    color_map_light = {}
+    for i, name in enumerate(scenario_names):
+        color_map_light[name] = SCENARIO_COLORS_LIGHT[i % len(SCENARIO_COLORS_LIGHT)]
+    if 'Persistence' in all_scenarios:
+        color_map_light['Persistence'] = '#BBBBBB'
 
-    for ax, (pred_col, ylabel) in zip(axes, [
-        ('pred_1m',   '0–1 m temperature (°C)'),
-        ('pred_0_5m', '0-5 m temperature (°C)'),
-    ]):
-        draw_order = [s for s in all_scenarios if s != 'Persistence']
-        if 'Persistence' in all_scenarios:
-            draw_order = ['Persistence'] + draw_order
+    fig, axes = plt.subplots(2, 1, figsize=(12, 8), sharex=True,
+                             gridspec_kw={'height_ratios': [3, 1.5]})
+    vline_kw = dict(color='#444', linestyle='--', linewidth=1, alpha=0.6)
+    vline_x  = init_date - pd.Timedelta(hours=12)
+
+    ax = axes[0]
+    full_range = pd.date_range(obs_start, pd.Timestamp(target_dates[-1]), freq='D')
+    draw_order = [s for s in all_scenarios if s != 'Persistence']
+    if 'Persistence' in all_scenarios:
+        draw_order = ['Persistence'] + draw_order
+
+    for pred_col, obs_col, depth_label, lw, obs_color, cmap in [
+        ('pred_1m',   'temp_1m_degC',   '1m',   2.0, 'black',   color_map),
+        ('pred_0_5m', 'temp_0_5m_degC', '0–5m', 1.5, '#444444', color_map_light),
+    ]:
+        obs_temp = pd.Series(dtype=float)
+        if obs_df is not None and obs_col in obs_df.columns:
+            obs_temp = obs_df[obs_col].reindex(full_range).dropna()
+            obs_temp = obs_temp[obs_temp.index < today]
+            if not obs_temp.empty:
+                ax.plot(obs_temp.index, obs_temp.values,
+                        color=obs_color, linewidth=lw, marker='o', markersize=4,
+                        label=f'Observed ({depth_label})', zorder=5)
+
+        last_obs_date = obs_temp.index[-1] if not obs_temp.empty else None
+        last_obs_val  = float(obs_temp.iloc[-1]) if not obs_temp.empty else np.nan
 
         for scenario in draw_order:
             sub = forecast_df[forecast_df['scenario'] == scenario]
             agg = sub.groupby('target_date')[pred_col].agg(['mean', 'std']).reindex(target_dates)
             mu, sig = agg['mean'], agg['std']
-            c  = color_map.get(scenario, '#000000')
-            ls = '--' if scenario == 'Persistence' else '-'
-            ax.plot(target_dates, mu, color=c, linewidth=2, linestyle=ls, label=scenario)
+            c = cmap.get(scenario, '#000000')
+            if (last_obs_date is not None and not np.isnan(last_obs_val)
+                    and last_obs_date < pd.Timestamp(target_dates[0])):
+                fc_dates_plot = [last_obs_date] + list(target_dates)
+                fc_mu_plot    = [last_obs_val]  + list(mu.values)
+            else:
+                fc_dates_plot = list(target_dates)
+                fc_mu_plot    = list(mu.values)
+            ax.plot(fc_dates_plot, fc_mu_plot, color=c, linewidth=lw, linestyle='--',
+                    label=f'{scenario} ({depth_label})')
             ax.fill_between(target_dates, mu - sig, mu + sig, color=c, alpha=0.15)
 
-        ax.set_ylabel(ylabel)
-        ax.legend(fontsize=10)
-        ax.grid(True, alpha=0.3)
+    ax.axvline(vline_x, **vline_kw)
+    ax.set_ylabel('Temperature (°C)')
+    ax.legend(fontsize=10)
+    ax.grid(True, alpha=0.3)
 
-    ax_flow = axes[2]
-    if pump_schedules and abt_schedules:
-        show_persist_bars = persist_pump_sch is not None and persist_abt_sch is not None
-        n_sc   = len(pump_schedules) + (1 if show_persist_bars else 0)
-        n_bars = n_sc * 2
-        bar_w  = 0.7 / n_bars
-        date_nums = mdates.date2num([pd.Timestamp(d) for d in target_dates])
+    # Operations panel: observed bars (history) + scenario bars (forecast)
+    ax = axes[1]
+    obs_nums = mdates.date2num([pd.Timestamp(d) for d in obs_dates])
+    fc_nums  = mdates.date2num([pd.Timestamp(d) for d in target_dates])
 
-        bar_idx = 0
-        if show_persist_bars:
-            c = BASELINE_COLOR
-            pump_offset = (2 * bar_idx     - (n_bars - 1) / 2) * bar_w
-            abt_offset  = (2 * bar_idx + 1 - (n_bars - 1) / 2) * bar_w
-            ax_flow.bar(date_nums + pump_offset, persist_pump_sch, width=bar_w,
-                        color=c, alpha=0.6, hatch='///', edgecolor='white',
-                        label='Persistence – Farr Pump')
-            ax_flow.bar(date_nums + abt_offset, persist_abt_sch, width=bar_w,
-                        color=c, alpha=0.6,
-                        label='Persistence – AT')
-            bar_idx += 1
+    pump_obs = [obs_df['pump_flow_cfs'].get(d, np.nan) if obs_df is not None else np.nan
+                for d in obs_dates]
+    abt_obs  = [float(abt_dict.get(d, np.nan)) for d in obs_dates]
 
-        for name, pump_sch, abt_sch in zip(scenario_names, pump_schedules, abt_schedules):
-            c = color_map.get(name, '#000000')
-            pump_offset = (2 * bar_idx     - (n_bars - 1) / 2) * bar_w
-            abt_offset  = (2 * bar_idx + 1 - (n_bars - 1) / 2) * bar_w
-            ax_flow.bar(date_nums + pump_offset, pump_sch, width=bar_w,
-                        color=c, alpha=0.8, hatch='///', edgecolor='white',
-                        label=f'{name} – Farr Pump')
-            ax_flow.bar(date_nums + abt_offset, abt_sch, width=bar_w,
-                        color=c, alpha=0.8,
-                        label=f'{name} – AT')
-            bar_idx += 1
+    bar_w_obs = 0.35
+    ax.bar(obs_nums - bar_w_obs / 2, pump_obs, width=bar_w_obs,
+           color='#888888', alpha=0.8, hatch='///', edgecolor='white', label='Observed – Farr Pump')
+    ax.bar(obs_nums + bar_w_obs / 2, abt_obs,  width=bar_w_obs,
+           color='#888888', alpha=0.8, label='Observed – AT')
 
-        ax_flow.xaxis_date()
-        ax_flow.set_ylabel('Flow (cfs)')
-        ax_flow.legend(fontsize=9)
-        ax_flow.grid(True, alpha=0.3, axis='y')
+    show_persist_bars = persist_pump_sch is not None and persist_abt_sch is not None
+    n_sc    = len(pump_schedules) + (1 if show_persist_bars else 0)
+    n_bars  = n_sc * 2
+    bar_w_fc = 0.7 / n_bars if n_bars > 0 else 0.35
+
+    bar_idx = 0
+    if show_persist_bars:
+        c = BASELINE_COLOR
+        pump_off = (2 * bar_idx     - (n_bars - 1) / 2) * bar_w_fc
+        abt_off  = (2 * bar_idx + 1 - (n_bars - 1) / 2) * bar_w_fc
+        ax.bar(fc_nums + pump_off, persist_pump_sch, width=bar_w_fc,
+               color=c, alpha=0.6, hatch='///', edgecolor='white', label='Persistence – Farr Pump')
+        ax.bar(fc_nums + abt_off,  persist_abt_sch,  width=bar_w_fc,
+               color=c, alpha=0.6, label='Persistence – AT')
+        bar_idx += 1
+
+    for name, pump_sch, abt_sch in zip(scenario_names, pump_schedules, abt_schedules):
+        c = color_map.get(name, '#000000')
+        pump_off = (2 * bar_idx     - (n_bars - 1) / 2) * bar_w_fc
+        abt_off  = (2 * bar_idx + 1 - (n_bars - 1) / 2) * bar_w_fc
+        ax.bar(fc_nums + pump_off, pump_sch, width=bar_w_fc,
+               color=c, alpha=0.8, hatch='///', edgecolor='white', label=f'{name} – Farr Pump')
+        ax.bar(fc_nums + abt_off,  abt_sch,  width=bar_w_fc,
+               color=c, alpha=0.8, label=f'{name} – AT')
+        bar_idx += 1
+
+    ax.xaxis_date()
+    ax.axvline(vline_x, **vline_kw)
+    ax.set_ylabel('Flow (cfs)')
+    ax.legend(fontsize=9, ncol=2)
+    ax.grid(True, alpha=0.3, axis='y')
 
     axes[-1].set_xlabel('Date')
-    fig.suptitle(f'7-day SMR temperature forecast — init {init_date.date()}', fontsize=13)
+    axes[-1].xaxis.set_major_locator(mdates.DayLocator())
+    axes[-1].xaxis.set_major_formatter(mdates.DateFormatter('%b %-d'))
+    plt.setp(axes[-1].get_xticklabels(), rotation=45, ha='right')
+    fig.suptitle(f'SMR 7-day temperature forecast — init {init_date.date()}', fontsize=13)
     fig.tight_layout()
     return fig
 
@@ -641,38 +702,26 @@ with st.sidebar:
     persist_abt   = float(abt_dict.get(prev_date, np.nan))
 
     # Fall back to last observed value (persistence) when prev_date data is missing
-    _persist_notes = []
+    _pump_persist_date = None
+    _abt_persist_date  = None
     if np.isnan(persist_pump):
         _s = obs_df['pump_flow_cfs'].dropna()
         _s = _s[_s.index <= prev_date]
         if not _s.empty:
-            persist_pump = float(_s.iloc[-1])
-            _persist_notes.append(
-                f"Farr Pump: no data for {prev_date.strftime('%Y-%m-%d')}; "
-                f"persistence assumed from {_s.index[-1].strftime('%Y-%m-%d')} "
-                f"({persist_pump:.0f} cfs)"
-            )
+            persist_pump       = float(_s.iloc[-1])
+            _pump_persist_date = _s.index[-1]
     if np.isnan(persist_nf):
         _s = obs_df['nf_flow_cfs'].dropna()
         _s = _s[_s.index <= prev_date]
         if not _s.empty:
             persist_nf = float(_s.iloc[-1])
-            _persist_notes.append(
-                f"NF flow: no data for {prev_date.strftime('%Y-%m-%d')}; "
-                f"persistence assumed from {_s.index[-1].strftime('%Y-%m-%d')} "
-                f"({persist_nf:.0f} cfs)"
-            )
     if np.isnan(persist_abt):
         _abt_valid = sorted(
             [(d, v) for d, v in abt_dict.items() if pd.notna(v) and d <= prev_date]
         )
         if _abt_valid:
             _last_abt_date, persist_abt = _abt_valid[-1]
-            _persist_notes.append(
-                f"Adams Tunnel: no data for {prev_date.strftime('%Y-%m-%d')}; "
-                f"persistence assumed from {_last_abt_date.strftime('%Y-%m-%d')} "
-                f"({persist_abt:.0f} cfs)"
-            )
+            _abt_persist_date           = _last_abt_date
 
     prev_ok = not (np.isnan(persist_pump) or np.isnan(persist_nf))
 
@@ -691,17 +740,31 @@ with st.sidebar:
     st.session_state['ei_flows'] = ei_flows
     st.session_state['ni_flows'] = ni_flows
 
+    # Auto-fill Scenario A with observed ops when switching to a retrospective date
+    if st.session_state.get('_last_init_date') != init_date:
+        st.session_state['_last_init_date'] = init_date
+        sid = st.session_state.scenarios[0]['id']
+        if init_date_raw != max_date:
+            st.session_state[f'sc_name_{sid}'] = 'Scenario A'
+            for j in range(7):
+                day = init_date + pd.Timedelta(days=j)
+                obs_pump = obs_df['pump_flow_cfs'].get(day, np.nan)
+                obs_abt  = abt_dict.get(day, np.nan)
+                st.session_state[f'pump_{sid}_{j}'] = int(obs_pump) if pd.notna(obs_pump) else 300
+                st.session_state[f'abt_{sid}_{j}']  = int(obs_abt)  if pd.notna(obs_abt)  else 200
+        else:
+            _init_scenario(sid, 'Scenario A')
+
     can_run = gefs_ok and prev_ok
-    run_clicked = st.button("Run Forecast", type="primary", disabled=not can_run,
-                            use_container_width=True)
 
     if prev_ok:
-        st.caption(f"**Prior-day ops ({prev_date.strftime('%Y-%m-%d')}):**  \n"
-                   f"Farr Pump {persist_pump:.0f} cfs  \n"
-                   f"Adams Tunnel {persist_abt:.0f} cfs")
-        if _persist_notes:
-            st.warning("Prior-day data unavailable — persistence assumed:\n\n" +
-                       "\n".join(f"- {n}" for n in _persist_notes))
+        _pump_note = (f" *(assumed from {_pump_persist_date.strftime('%b %-d')}, previous day data unavailable)*"
+                      if _pump_persist_date else "")
+        _abt_note  = (f" *(assumed from {_abt_persist_date.strftime('%b %-d')}, previous day data unavailable)*"
+                      if _abt_persist_date else "")
+        st.caption(f"**Prior-day ops ({prev_date.strftime('%b %-d')}):**  \n"
+                   f"Farr Pump {persist_pump:.0f} cfs{_pump_note}  \n"
+                   f"Adams Tunnel {persist_abt:.0f} cfs{_abt_note}")
 
     st.subheader("Operational Scenarios")
 
@@ -750,6 +813,19 @@ with st.sidebar:
                     st.warning(f"Inflow < AT on: {day_strs} — reservoir volume will be impacted.")
 
 
+# ── Scenario fingerprint for auto-run detection ───────────────────────────────
+_sc_fingerprint = (
+    init_date,
+    tuple(
+        (
+            st.session_state.get(f'sc_name_{sc["id"]}', sc['name']),
+            tuple(st.session_state.get(f'pump_{sc["id"]}_{j}', 300) for j in range(7)),
+            tuple(st.session_state.get(f'abt_{sc["id"]}_{j}',  200) for j in range(7)),
+        )
+        for sc in st.session_state.scenarios
+    ),
+)
+
 # ── Main area ─────────────────────────────────────────────────────────────────
 
 st.markdown(
@@ -760,7 +836,12 @@ st.markdown(
 if not can_run and not gefs_ok:
     st.info("Select a date that has an available GEFS operational file to enable the forecast.")
 
-if run_clicked:
+should_run = (
+    can_run and
+    st.session_state.get('_last_fingerprint') != _sc_fingerprint
+)
+
+if should_run:
     cv_models, cv_scalers, feature_cols = load_models()
     abt_dict, ei_dict, ni_dict, bakc2_df, coeff_nf, coeff_ei, coeff_ni = load_data()
     realtime_state, obs_df = load_realtime_state(init_date)
@@ -845,36 +926,42 @@ if run_clicked:
     st.session_state['abt_schedules']      = abt_schedules
     st.session_state['pump_persist_sch']   = persist_pump_sch
     st.session_state['abt_persist_sch']    = persist_abt_sch
+    st.session_state['_last_fingerprint']  = _sc_fingerprint
 
 if 'forecast_df' in st.session_state:
     _fdf   = st.session_state['forecast_df']
     _names = st.session_state['forecast_scenario_names']
     _idate = st.session_state['forecast_init_date']
 
-    show_baseline = st.checkbox("Show persistence (previous day pump/AT operations)", value=True)
+    show_baseline = st.checkbox("Show persistence (previous day pump/AT operations)", value=False)
 
     disp_df = _fdf if show_baseline else _fdf[_fdf['scenario'] != 'Persistence']
 
-    tab_viz, tab_tables, tab_wb, tab_inputs = st.tabs(["Forecast", "Summary Tables", "Water Balance", "Met & Flow Inputs"])
+    fig = make_unified_figure(
+        disp_df,
+        st.session_state.get('obs_df'),
+        abt_dict,
+        _idate,
+        _names,
+        st.session_state.get('pump_schedules', []),
+        st.session_state.get('abt_schedules',  []),
+        st.session_state.get('pump_persist_sch') if show_baseline else None,
+        st.session_state.get('abt_persist_sch') if show_baseline else None,
+    )
+    st.pyplot(fig)
 
-    with tab_viz:
-        fig = make_figure(disp_df, _idate, _names,
-                          st.session_state.get('pump_schedules'),
-                          st.session_state.get('abt_schedules'),
-                          st.session_state.get('pump_persist_sch') if show_baseline else None,
-                          st.session_state.get('abt_persist_sch') if show_baseline else None)
-        st.pyplot(fig)
+    png_buf = io.BytesIO()
+    fig.savefig(png_buf, format='png', dpi=150, bbox_inches='tight')
+    png_buf.seek(0)
+    st.download_button(
+        "Download PNG",
+        data=png_buf,
+        file_name=f'SMR_forecast_{_idate.strftime("%Y%m%d")}.png',
+        mime='image/png',
+    )
+    plt.close(fig)
 
-        png_buf = io.BytesIO()
-        fig.savefig(png_buf, format='png', dpi=150, bbox_inches='tight')
-        png_buf.seek(0)
-        st.download_button(
-            "Download PNG",
-            data=png_buf,
-            file_name=f'pump_operational_{_idate.strftime("%Y%m%d")}.png',
-            mime='image/png',
-        )
-        plt.close(fig)
+    tab_tables, tab_wb, tab_inputs = st.tabs(["Summary Tables", "Water Balance", "Met & Flow Inputs"])
 
     with tab_tables:
         summary = make_summary(_fdf, _idate, _names, show_baseline)
