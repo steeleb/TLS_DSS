@@ -6,6 +6,7 @@ Run with:
 """
 import io
 import json
+import time
 import warnings
 warnings.filterwarnings('ignore')
 from pathlib import Path
@@ -15,6 +16,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
+from matplotlib.transforms import blended_transform_factory
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -46,6 +48,11 @@ SCENARIO_COLORS       = ['#E69F00', '#56B4E9', '#009E73', '#CC79A7']
 SCENARIO_COLORS_LIGHT = ['#F4CC7E', '#ABD9F4', '#80CEBC', '#E5BCD4']  # pastel pairs for 0–5m depth
 BASELINE_COLOR        = '#888888'
 DEFAULT_NAMES   = ['Scenario A', 'Scenario B', 'Scenario C', 'Scenario D']
+
+
+@st.dialog("How to Use This App", width="large")
+def _show_help():
+    st.markdown((BASE_DIR / "how_to_use.md").read_text())
 
 
 # ── Cached loaders ────────────────────────────────────────────────────────────
@@ -336,7 +343,8 @@ def make_met_flow_figure(gefs_d, obs_df, abt_dict, ei_dict, ni_dict,
                          nf_flows, ei_flows, ni_flows,
                          pump_schedules, abt_schedules,
                          persist_pump_sch, persist_abt_sch,
-                         scenario_names, init_date):
+                         scenario_names, init_date,
+                         is_retrospective=False):
     obs_start = init_date - pd.Timedelta(days=7)
     obs_end   = init_date - pd.Timedelta(days=1)
     obs_dates = pd.date_range(obs_start, obs_end, freq='D')
@@ -393,17 +401,39 @@ def make_met_flow_figure(gefs_d, obs_df, abt_dict, ei_dict, ni_dict,
     bar_idx += 1
 
     for i, (name, p_sch, a_sch) in enumerate(zip(scenario_names, pump_schedules, abt_schedules)):
-        c = SCENARIO_COLORS[i % len(SCENARIO_COLORS)]
+        sc_color = SCENARIO_COLORS[i % len(SCENARIO_COLORS)]
         pump_off = (2 * bar_idx     - (n_bars_fc - 1) / 2) * bar_w_fc
         abt_off  = (2 * bar_idx + 1 - (n_bars_fc - 1) / 2) * bar_w_fc
-        ax.bar(fc_nums + pump_off, p_sch, width=bar_w_fc,
-               color=c, alpha=0.8, hatch='///', edgecolor='white', label=f'{name} – Farr Pump')
-        ax.bar(fc_nums + abt_off,  a_sch, width=bar_w_fc,
-               color=c, alpha=0.8, label=f'{name} – AT')
+        if is_retrospective and i == 0:
+            obs_mask = [
+                pd.notna(obs_df['pump_flow_cfs'].get(pd.Timestamp(td), np.nan) if obs_df is not None else np.nan) or
+                pd.notna(abt_dict.get(pd.Timestamp(td), np.nan))
+                for td in fc_dates
+            ]
+            p_gray  = [p if m else np.nan for p, m in zip(p_sch, obs_mask)]
+            a_gray  = [a if m else np.nan for a, m in zip(a_sch, obs_mask)]
+            p_free  = [p if not m else np.nan for p, m in zip(p_sch, obs_mask)]
+            a_free  = [a if not m else np.nan for a, m in zip(a_sch, obs_mask)]
+            ax.bar(fc_nums + pump_off, p_gray, width=bar_w_fc,
+                   color='#222222', alpha=0.8, hatch='///', edgecolor='white', label=f'{name} – Farr Pump')
+            ax.bar(fc_nums + abt_off,  a_gray, width=bar_w_fc,
+                   color='#222222', alpha=0.8, label=f'{name} – AT')
+            ax.bar(fc_nums + pump_off, p_free, width=bar_w_fc,
+                   color=sc_color, alpha=0.8, hatch='///', edgecolor='white')
+            ax.bar(fc_nums + abt_off,  a_free, width=bar_w_fc,
+                   color=sc_color, alpha=0.8)
+        else:
+            ax.bar(fc_nums + pump_off, p_sch, width=bar_w_fc,
+                   color=sc_color, alpha=0.8, hatch='///', edgecolor='white', label=f'{name} – Farr Pump')
+            ax.bar(fc_nums + abt_off,  a_sch, width=bar_w_fc,
+                   color=sc_color, alpha=0.8, label=f'{name} – AT')
         bar_idx += 1
 
     ax.xaxis_date()
     ax.axvline(vline_x, **vline_kw)
+    _trans = blended_transform_factory(ax.transData, ax.transAxes)
+    ax.text(mdates.date2num(vline_x) + 0.17, 0.97, 'forecast period →',
+            transform=_trans, fontsize=8, va='top', ha='left', color='#555')
     ax.set_ylabel('Delivery (cfs)')
     ax.legend(fontsize=8, ncol=2)
     ax.grid(True, alpha=0.3, axis='y')
@@ -449,7 +479,8 @@ def make_met_flow_figure(gefs_d, obs_df, abt_dict, ei_dict, ni_dict,
 
 def make_unified_figure(forecast_df, obs_df, abt_dict, init_date, scenario_names,
                         pump_schedules, abt_schedules,
-                        persist_pump_sch=None, persist_abt_sch=None):
+                        persist_pump_sch=None, persist_abt_sch=None,
+                        is_retrospective=False):
     today = pd.Timestamp.today().normalize()
 
     obs_end   = init_date - pd.Timedelta(days=1)
@@ -515,6 +546,9 @@ def make_unified_figure(forecast_df, obs_df, abt_dict, init_date, scenario_names
             ax.fill_between(target_dates, mu - sig, mu + sig, color=c, alpha=0.15)
 
     ax.axvline(vline_x, **vline_kw)
+    _trans = blended_transform_factory(ax.transData, ax.transAxes)
+    ax.text(mdates.date2num(vline_x) + 0.17, 0.97, 'forecast period →',
+            transform=_trans, fontsize=9, va='top', ha='left', color='#555')
     ax.set_ylabel('Temperature (°C)')
     ax.legend(fontsize=10)
     ax.grid(True, alpha=0.3)
@@ -550,14 +584,33 @@ def make_unified_figure(forecast_df, obs_df, abt_dict, init_date, scenario_names
                color=c, alpha=0.6, label='Persistence – AT')
         bar_idx += 1
 
-    for name, pump_sch, abt_sch in zip(scenario_names, pump_schedules, abt_schedules):
-        c = color_map.get(name, '#000000')
+    for idx, (name, pump_sch, abt_sch) in enumerate(zip(scenario_names, pump_schedules, abt_schedules)):
+        sc_color = color_map.get(name, '#000000')
         pump_off = (2 * bar_idx     - (n_bars - 1) / 2) * bar_w_fc
         abt_off  = (2 * bar_idx + 1 - (n_bars - 1) / 2) * bar_w_fc
-        ax.bar(fc_nums + pump_off, pump_sch, width=bar_w_fc,
-               color=c, alpha=0.8, hatch='///', edgecolor='white', label=f'{name} – Farr Pump')
-        ax.bar(fc_nums + abt_off,  abt_sch,  width=bar_w_fc,
-               color=c, alpha=0.8, label=f'{name} – AT')
+        if is_retrospective and idx == 0:
+            obs_mask = [
+                pd.notna(obs_df['pump_flow_cfs'].get(pd.Timestamp(td), np.nan) if obs_df is not None else np.nan) or
+                pd.notna(abt_dict.get(pd.Timestamp(td), np.nan))
+                for td in target_dates
+            ]
+            pump_gray  = [p if m else np.nan for p, m in zip(pump_sch, obs_mask)]
+            abt_gray   = [a if m else np.nan for a, m in zip(abt_sch,  obs_mask)]
+            pump_free  = [p if not m else np.nan for p, m in zip(pump_sch, obs_mask)]
+            abt_free   = [a if not m else np.nan for a, m in zip(abt_sch,  obs_mask)]
+            ax.bar(fc_nums + pump_off, pump_gray, width=bar_w_fc,
+                   color='#888888', alpha=0.8, hatch='///', edgecolor='white', label=f'{name} – Farr Pump')
+            ax.bar(fc_nums + abt_off,  abt_gray,  width=bar_w_fc,
+                   color='#888888', alpha=0.8, label=f'{name} – AT')
+            ax.bar(fc_nums + pump_off, pump_free, width=bar_w_fc,
+                   color=sc_color, alpha=0.8, hatch='///', edgecolor='white')
+            ax.bar(fc_nums + abt_off,  abt_free,  width=bar_w_fc,
+                   color=sc_color, alpha=0.8)
+        else:
+            ax.bar(fc_nums + pump_off, pump_sch, width=bar_w_fc,
+                   color=sc_color, alpha=0.8, hatch='///', edgecolor='white', label=f'{name} – Farr Pump')
+            ax.bar(fc_nums + abt_off,  abt_sch,  width=bar_w_fc,
+                   color=sc_color, alpha=0.8, label=f'{name} – AT')
         bar_idx += 1
 
     ax.xaxis_date()
@@ -621,7 +674,7 @@ def make_summary(forecast_df, init_date, scenario_names, show_persistence):
                 row[f'[{sc_name}] std_degC']  = round(sc_sub.std(),  3)
                 if persist_df is not None:
                     bl_sub = persist_df[persist_df['horizon'] == h][pred_col]
-                    row[f'[{sc_name}] Δ_vs_persistence'] = round(sc_sub.mean() - bl_sub.mean(), 3)
+                    row[f'[{sc_name}] delt_vs_persistence'] = round(sc_sub.mean() - bl_sub.mean(), 3)
             rows.append(row)
 
     return pd.DataFrame(rows)
@@ -640,6 +693,9 @@ if 'scenarios' not in st.session_state:
     st.session_state.scenarios = [{'id': 0, 'name': 'Scenario A'}]
     st.session_state.next_id   = 1
     _init_scenario(0, 'Scenario A')
+
+if '_show_baseline' not in st.session_state:
+    st.session_state['_show_baseline'] = False
 
 
 def _add_scenario():
@@ -664,6 +720,14 @@ def _remove_scenario():
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 
 with st.sidebar:
+    _c1, _c2 = st.columns(2)
+    if _c1.button("How to Use", use_container_width=True):
+        _show_help()
+    _c2.link_button(
+        "Contact / Suggest",
+        "mailto:b.steele@colostate.edu?subject=SMR%20Forecast%20App%20Feedback",
+        use_container_width=True,
+    )
     st.header("Forecast Settings")
 
     # Load static data (cached)
@@ -741,11 +805,13 @@ with st.sidebar:
     st.session_state['ei_flows'] = ei_flows
     st.session_state['ni_flows'] = ni_flows
 
+    is_retrospective = (init_date_raw != max_date)
+
     # Auto-fill Scenario A with observed ops when switching to a retrospective date
     if st.session_state.get('_last_init_date') != init_date:
         st.session_state['_last_init_date'] = init_date
         sid = st.session_state.scenarios[0]['id']
-        if init_date_raw != max_date:
+        if is_retrospective:
             st.session_state[f'sc_name_{sid}'] = 'Scenario A'
             for j in range(7):
                 day = init_date + pd.Timedelta(days=j)
@@ -753,6 +819,8 @@ with st.sidebar:
                 obs_abt  = abt_dict.get(day, np.nan)
                 st.session_state[f'pump_{sid}_{j}'] = int(obs_pump) if pd.notna(obs_pump) else 300
                 st.session_state[f'abt_{sid}_{j}']  = int(obs_abt)  if pd.notna(obs_abt)  else 200
+            while len(st.session_state.scenarios) > 2:
+                _remove_scenario()
         else:
             _init_scenario(sid, 'Scenario A')
 
@@ -769,9 +837,10 @@ with st.sidebar:
 
     st.subheader("Operational Scenarios")
 
+    _max_scenarios = 2 if is_retrospective else 4
     c1, c2 = st.columns(2)
     c1.button("＋ Add",    on_click=_add_scenario,    key="btn_add",
-              disabled=len(st.session_state.scenarios) >= 4,
+              disabled=len(st.session_state.scenarios) >= _max_scenarios,
               use_container_width=True)
     c2.button("－ Remove", on_click=_remove_scenario, key="btn_remove",
               disabled=len(st.session_state.scenarios) <= 1,
@@ -783,10 +852,13 @@ with st.sidebar:
 
     sc_tabs = st.tabs([sc['name'] for sc in st.session_state.scenarios])
 
-    for tab, sc in zip(sc_tabs, st.session_state.scenarios):
+    for i, (tab, sc) in enumerate(zip(sc_tabs, st.session_state.scenarios)):
         sid = sc['id']
+        lock_sc_a = is_retrospective and (i == 0)
         with tab:
-            st.text_input("Name", key=f'sc_name_{sid}')
+            st.text_input("Name", key=f'sc_name_{sid}', disabled=lock_sc_a)
+            if lock_sc_a:
+                st.caption("Scenario A reflects observed operations. Days with observed data cannot be edited.")
 
             h1, h2, h3 = st.columns(3)
             h1.write("**Date**")
@@ -797,10 +869,17 @@ with st.sidebar:
                 lbl = f"{day_date.strftime('%a %b')} {day_date.day}"
                 c1, c2, c3 = st.columns(3)
                 c1.write(lbl)
+                if lock_sc_a:
+                    lock_pump = pd.notna(obs_df['pump_flow_cfs'].get(day_date, np.nan))
+                    lock_abt  = pd.notna(abt_dict.get(day_date, np.nan))
+                else:
+                    lock_pump = lock_abt = False
                 c2.number_input(lbl, min_value=0, max_value=800, step=50,
-                                key=f'pump_{sid}_{j}', label_visibility="collapsed")
+                                key=f'pump_{sid}_{j}', label_visibility="collapsed",
+                                disabled=lock_pump)
                 c3.number_input(lbl, min_value=0, max_value=600, step=50,
-                                key=f'abt_{sid}_{j}', label_visibility="collapsed")
+                                key=f'abt_{sid}_{j}', label_visibility="collapsed",
+                                disabled=lock_abt)
 
             # ── Water balance check (live) ────────────────────────────────────
             if prev_ok:
@@ -829,26 +908,26 @@ _sc_fingerprint = (
 
 # ── Main area ─────────────────────────────────────────────────────────────────
 
-col_title, col_btn = st.columns([5, 1])
-with col_title:
-    st.markdown(
-        "<h1 style='line-height:1.2; margin-bottom:0'>Shadow Mountain Reservoir<br>7-Day Temperature Forecast</h1>",
-        unsafe_allow_html=True,
-    )
-with col_btn:
-    st.link_button(
-        "Contact / Suggest",
-        "mailto:b.steele@colostate.edu?subject=SMR%20Forecast%20App%20Feedback",
-        use_container_width=True,
-    )
+st.markdown(
+    "<h1 style='line-height:1.2; margin-bottom:0'>Shadow Mountain Reservoir<br>7-Day Temperature Forecast</h1>",
+    unsafe_allow_html=True,
+)
 
 if not can_run and not gefs_ok:
     st.info("Select a date that has an available GEFS operational file to enable the forecast.")
 
-should_run = (
-    can_run and
-    st.session_state.get('_last_fingerprint') != _sc_fingerprint
-)
+# Debounce: wait 0.5 s of inactivity before running the forecast
+_fingerprint_changed = _sc_fingerprint != st.session_state.get('_last_fingerprint')
+if _fingerprint_changed:
+    if st.session_state.get('_pending_fingerprint') != _sc_fingerprint:
+        st.session_state['_pending_fingerprint'] = _sc_fingerprint
+        st.session_state['_pending_since'] = time.time()
+    elapsed = time.time() - st.session_state['_pending_since']
+    if elapsed < 0.5:
+        time.sleep(0.5 - elapsed)
+        st.rerun()
+
+should_run = can_run and _fingerprint_changed
 
 if should_run:
     cv_models, cv_scalers, feature_cols = load_models()
@@ -935,6 +1014,7 @@ if should_run:
     st.session_state['abt_schedules']      = abt_schedules
     st.session_state['pump_persist_sch']   = persist_pump_sch
     st.session_state['abt_persist_sch']    = persist_abt_sch
+    st.session_state['is_retrospective']   = is_retrospective
     st.session_state['_last_fingerprint']  = _sc_fingerprint
 
 if 'forecast_df' in st.session_state:
@@ -942,7 +1022,11 @@ if 'forecast_df' in st.session_state:
     _names = st.session_state['forecast_scenario_names']
     _idate = st.session_state['forecast_init_date']
 
-    show_baseline = st.checkbox("Show persistence (previous day pump/AT operations)", value=False)
+    show_baseline = st.checkbox(
+        "Show persistence (previous day pump/AT operations)",
+        value=st.session_state['_show_baseline'],
+    )
+    st.session_state['_show_baseline'] = show_baseline
 
     disp_df = _fdf if show_baseline else _fdf[_fdf['scenario'] != 'Persistence']
 
@@ -956,6 +1040,7 @@ if 'forecast_df' in st.session_state:
         st.session_state.get('abt_schedules',  []),
         st.session_state.get('pump_persist_sch') if show_baseline else None,
         st.session_state.get('abt_persist_sch') if show_baseline else None,
+        is_retrospective=st.session_state.get('is_retrospective', False),
     )
     st.pyplot(fig)
 
@@ -970,7 +1055,9 @@ if 'forecast_df' in st.session_state:
     )
     plt.close(fig)
 
-    tab_tables, tab_wb, tab_inputs = st.tabs(["Summary Tables", "Water Balance", "Met & Flow Inputs"])
+    tab_compare, tab_tables, tab_wb, tab_inputs = st.tabs(
+        ["Scenario Comparison", "Summary Tables", "Water Balance", "Met & Flow Inputs"]
+    )
 
     with tab_tables:
         summary = make_summary(_fdf, _idate, _names, show_baseline)
@@ -978,10 +1065,10 @@ if 'forecast_df' in st.session_state:
         _rename = lambda c: (
             'Forecast Date' if c == 'target_date'
             else c.replace('mean_degC', 'Mean Predicted Water Temperature (°C)')
-                   .replace('Δ_vs_persistence', 'Departure from Persistence Forecast')
+                   .replace('delt_vs_persistence', 'Departure from Persistence Forecast')
         )
 
-        st.subheader("0–1 m depth")
+        st.subheader("0–1 m depth (near-surface)")
         tbl_1m = (summary[summary['temp_target'] == '1m']
                   .drop(columns=_drop_cols)
                   .rename(columns=_rename)
@@ -1033,6 +1120,71 @@ if 'forecast_df' in st.session_state:
                     hide_index=True,
                 )
 
+    with tab_compare:
+        all_options = ['Persistence'] + _names
+        ref_sc = st.selectbox(
+            "Reference scenario (all others compared against this):",
+            options=all_options,
+            index=0,
+            key='compare_ref',
+        )
+
+        ref_agg = (
+            _fdf[_fdf['scenario'] == ref_sc]
+            .groupby('target_date')[['pred_1m', 'pred_0_5m']].mean()
+        )
+
+        compare_scs = [s for s in all_options if s != ref_sc]
+        rows_1m, rows_05m = [], []
+        for sc in compare_scs:
+            sc_agg = (
+                _fdf[_fdf['scenario'] == sc]
+                .groupby('target_date')[['pred_1m', 'pred_0_5m']].mean()
+            )
+            diff = sc_agg - ref_agg
+            row_1m  = {'Scenario': sc}
+            row_05m = {'Scenario': sc}
+            for td in sorted(diff.index):
+                lbl = pd.Timestamp(td).strftime('%b %-d')
+                row_1m[lbl]  = round(float(diff.loc[td, 'pred_1m']),  2)
+                row_05m[lbl] = round(float(diff.loc[td, 'pred_0_5m']), 2)
+            rows_1m.append(row_1m)
+            rows_05m.append(row_05m)
+
+        if compare_scs:
+            st.caption(
+                f"Delta °C = scenario mean − {ref_sc} mean. "
+                "Positive = warmer than reference; negative = cooler."
+            )
+            df_1m  = pd.DataFrame(rows_1m)
+            df_05m = pd.DataFrame(rows_05m)
+            date_cols = [c for c in df_1m.columns if c != 'Scenario']
+            max_abs = max(
+                df_1m[date_cols].abs().max().max(),
+                df_05m[date_cols].abs().max().max(),
+                0.1,
+            )
+
+            st.subheader(f"Change in Temperature vs {ref_sc} — 0–1 m depth")
+            st.dataframe(
+                df_1m.style.background_gradient(
+                    cmap='coolwarm', axis=None, subset=date_cols,
+                    vmin=-max_abs, vmax=max_abs,
+                ).format({c: '{:+.2f}' for c in date_cols}),
+                use_container_width=True, hide_index=True,
+            )
+
+            st.subheader(f"Change in Temperature vs {ref_sc} — 0–5 m depth (integrated)")
+            st.dataframe(
+                df_05m.style.background_gradient(
+                    cmap='coolwarm', axis=None, subset=date_cols,
+                    vmin=-max_abs, vmax=max_abs,
+                ).format({c: '{:+.2f}' for c in date_cols}),
+                use_container_width=True, hide_index=True,
+            )
+        else:
+            st.info("Add at least two scenarios to enable comparison.")
+
     with tab_inputs:
         if 'gefs_d_raw' in st.session_state:
             abt_dict, ei_dict, ni_dict, bakc2_df, coeff_nf, coeff_ei, coeff_ni = load_data()
@@ -1049,6 +1201,7 @@ if 'forecast_df' in st.session_state:
                 st.session_state['abt_persist_sch'],
                 _names,
                 st.session_state['met_flow_init_date'],
+                is_retrospective=st.session_state.get('is_retrospective', False),
             )
             st.caption(
                 "Dashed vertical line marks the forecast initialization date. "
