@@ -9,7 +9,8 @@ all downstream uses of this work be available to the public when possible. Durin
 development of the code in this repository, AI (ChatGPT) was used to help create 
 the architecture for the Shiny App and was also used to help with coding the 
 rollout of the forecast in Python, most code was modified in part or whole after 
-creation by ChatGPT.
+creation by ChatGPT. The streamlit app was aided by Claude Code in the same manner
+as described here.
 
 Repository contact: B Steele (b dot steele at colostate dot edu)
 
