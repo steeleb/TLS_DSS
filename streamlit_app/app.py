@@ -1353,3 +1353,10 @@ if 'forecast_df' in st.session_state:
             fig_crps = make_crps_figure(crps_df)
             st.pyplot(fig_crps)
             plt.close(fig_crps)
+
+        st.subheader("2025 Season Reference Performance")
+        st.caption(
+            "CRPS by forecast lead day and month from the 2025 model test period "
+            "(BAKC2 deterministic flow forecast vs. persistence baseline)."
+        )
+        st.image(BASE_DIR / 'image.png', use_container_width=True)
