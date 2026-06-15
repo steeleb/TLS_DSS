@@ -191,7 +191,7 @@ def load_realtime_state(init_date):
 def _apply_reg(bakc2_cfs, coeff_df, month_abbrev):
     """Apply monthly linear regression: flow = intercept + slope * bakc2_cfs."""
     row = coeff_df.loc[month_abbrev]
-    return float(row['intercept'] + row['slope'] * bakc2_cfs)
+    return max(0.0, float(row['intercept'] + row['slope'] * bakc2_cfs))
 
 
 def get_bakc2_flow_estimates(init_date, bakc2_df, coeff_nf, coeff_ei, coeff_ni):
@@ -680,6 +680,136 @@ def make_summary(forecast_df, init_date, scenario_names, show_persistence):
     return pd.DataFrame(rows)
 
 
+def _crps_ensemble(preds: np.ndarray, obs: float) -> float:
+    """Energy-score CRPS for a finite ensemble vs scalar observation."""
+    m = len(preds)
+    mae_term    = np.mean(np.abs(preds - obs))
+    spread_term = np.sum(np.abs(preds[:, None] - preds[None, :])) / (2 * m ** 2)
+    return float(mae_term - spread_term)
+
+
+def _prep_gefs_d(gefs_path):
+    """Load a GEFS CSV and return the member×horizon indexed DataFrame."""
+    raw = pd.read_csv(gefs_path)
+    raw = raw[raw['horizon'].isin(NEEDED_HORIZONS)].copy()
+    raw['gefs_temp_degC']    = raw['t2m'] - 273.15
+    raw['gefs_wind_mps']     = np.sqrt(raw['u10'] ** 2 + raw['v10'] ** 2)
+    raw['gefs_sol_rad_Wpm2'] = raw['sdswrf'].fillna(0.0)
+    return raw[['member', 'horizon'] + GEFS_VARS].set_index(['member', 'horizon'])
+
+
+@st.cache_data(ttl=3600)
+def compute_ytd_crps(today_str: str) -> pd.DataFrame:
+    """Retrospective CRPS over all archived GEFS dates with matching observations."""
+    cv_models, cv_scalers, feature_cols = load_models()
+    abt_dict, ei_dict, ni_dict, bakc2_df, coeff_nf, coeff_ei, coeff_ni = load_data()
+
+    pump_raw = pd.read_csv(RAW_DIR / 'granby_daily_pump_data.csv', parse_dates=['date'])
+    pump_ser = pump_raw.set_index('date')['value'].ffill()
+
+    buoy_raw = pd.read_csv(RAW_DIR / 'SM_MID_L1.csv', parse_dates=['dateTime'])
+    buoy_raw = buoy_raw[buoy_raw['flag_temp'].isna()]
+    buoy_raw['date'] = buoy_raw['dateTime'].dt.normalize()
+    obs_1m  = buoy_raw[buoy_raw['depth_m'] <= 1.0].groupby('date')['temp_C'].mean()
+    obs_05m = buoy_raw[buoy_raw['depth_m'] <= 5.0].groupby('date')['temp_C'].mean()
+    obs_1m.index  = pd.DatetimeIndex(obs_1m.index).tz_localize(None)
+    obs_05m.index = pd.DatetimeIndex(obs_05m.index).tz_localize(None)
+
+    today   = pd.Timestamp(today_str)
+    records = []
+
+    for gefs_file in sorted(GEFS_DIR.glob('GEFS_p25_*.csv')):
+        init_date = pd.Timestamp(gefs_file.stem.replace('GEFS_p25_', ''))
+        if init_date >= today:
+            continue
+
+        try:
+            gefs_d = _prep_gefs_d(gefs_file)
+        except Exception:
+            continue
+
+        realtime_state, _ = load_realtime_state(init_date.strftime('%Y-%m-%d'))
+        nf_flows_raw, ei_flows_raw, ni_flows_raw = get_bakc2_flow_estimates(
+            init_date, bakc2_df, coeff_nf, coeff_ei, coeff_ni
+        )
+        prev = init_date - pd.Timedelta(days=1)
+        nf_flows = {h: (nf_flows_raw[h] if nf_flows_raw[h] is not None
+                        else float(obs_1m.get(prev, np.nan)))  for h in HORIZONS}
+        ei_flows = {h: (ei_flows_raw[h] if ei_flows_raw[h] is not None
+                        else float(ei_dict.get(prev, np.nan))) for h in HORIZONS}
+        ni_flows = {h: (ni_flows_raw[h] if ni_flows_raw[h] is not None
+                        else float(ni_dict.get(prev, np.nan))) for h in HORIZONS}
+
+        pump_schedule = [float(pump_ser.get(init_date + pd.Timedelta(days=i), np.nan))
+                         for i in range(6)]
+        abt_schedule  = [float(abt_dict.get(init_date + pd.Timedelta(days=i), np.nan))
+                         for i in range(7)]
+
+        try:
+            sc_records = run_scenario(
+                'control', pump_schedule, abt_schedule,
+                init_date, gefs_d, realtime_state, abt_dict,
+                cv_models, cv_scalers, feature_cols,
+                nf_flows, ei_flows, ni_flows,
+            )
+        except Exception:
+            continue
+
+        for h in HORIZONS:
+            valid_date = (init_date + pd.Timedelta(days=h - 1)).normalize()
+            obs1  = obs_1m.get(valid_date,  np.nan)
+            obs05 = obs_05m.get(valid_date, np.nan)
+            h_recs = [r for r in sc_records if r['horizon'] == h]
+            if not h_recs:
+                continue
+            ens_1m  = np.array([r['pred_1m']  for r in h_recs])
+            ens_05m = np.array([r['pred_0_5m'] for r in h_recs])
+            if not np.isnan(obs1):
+                records.append({'horizon': h, 'depth': '0–1 m',
+                                'crps': _crps_ensemble(ens_1m, obs1)})
+            if not np.isnan(obs05):
+                records.append({'horizon': h, 'depth': '0–5 m',
+                                'crps': _crps_ensemble(ens_05m, obs05)})
+
+    return pd.DataFrame(records)
+
+
+def make_crps_figure(crps_df: pd.DataFrame):
+    """Grouped bar chart of mean CRPS by forecast horizon for both depths."""
+    summary = (crps_df
+               .groupby(['horizon', 'depth'])['crps']
+               .agg(mean_crps='mean', n='count')
+               .reset_index())
+
+    depths = ['0–1 m', '0–5 m']
+    colors = ['#56B4E9', '#009E73']
+    x      = np.arange(len(HORIZONS))
+    width  = 0.35
+
+    fig, ax = plt.subplots(figsize=(9, 4))
+    for i, (depth, color) in enumerate(zip(depths, colors)):
+        sub  = summary[summary['depth'] == depth].set_index('horizon')
+        vals = [sub.loc[h, 'mean_crps'] if h in sub.index else np.nan for h in HORIZONS]
+        ns   = [int(sub.loc[h, 'n'])    if h in sub.index else 0      for h in HORIZONS]
+        bars = ax.bar(x + (i - 0.5) * width, vals, width,
+                      label=depth, color=color, alpha=0.85)
+        for bar, n in zip(bars, ns):
+            if n > 0:
+                ax.text(bar.get_x() + bar.get_width() / 2,
+                        bar.get_height() + 0.005,
+                        f'n={n}', ha='center', va='bottom', fontsize=7)
+
+    ax.set_xticks(x)
+    ax.set_xticklabels([f'Day {h}' for h in HORIZONS])
+    ax.set_xlabel('Forecast Horizon')
+    ax.set_ylabel('Mean CRPS (°C)')
+    ax.set_title('Year-to-Date Forecast Performance (Control Scenario)')
+    ax.legend(title='Depth')
+    ax.set_ylim(bottom=0)
+    fig.tight_layout()
+    return fig
+
+
 # ── Session state init ────────────────────────────────────────────────────────
 
 def _init_scenario(sid, name, pump_default=300, abt_default=200):
@@ -938,12 +1068,7 @@ if should_run:
     ni_flows = st.session_state['ni_flows']
 
     # Load and transform GEFS file
-    gefs_raw = pd.read_csv(gefs_path)
-    gefs_raw = gefs_raw[gefs_raw['horizon'].isin(NEEDED_HORIZONS)].copy()
-    gefs_raw['gefs_temp_degC']    = gefs_raw['t2m'] - 273.15
-    gefs_raw['gefs_wind_mps']     = np.sqrt(gefs_raw['u10'] ** 2 + gefs_raw['v10'] ** 2)
-    gefs_raw['gefs_sol_rad_Wpm2'] = gefs_raw['sdswrf'].fillna(0.0)
-    gefs_d = gefs_raw[['member', 'horizon'] + GEFS_VARS].set_index(['member', 'horizon'])
+    gefs_d = _prep_gefs_d(gefs_path)
 
     # Collect scenario configs from widget state
     scenario_names = []
@@ -1055,8 +1180,8 @@ if 'forecast_df' in st.session_state:
     )
     plt.close(fig)
 
-    tab_compare, tab_tables, tab_wb, tab_inputs = st.tabs(
-        ["Scenario Comparison", "Summary Tables", "Water Balance", "Met & Flow Inputs"]
+    tab_compare, tab_tables, tab_wb, tab_inputs, tab_crps = st.tabs(
+        ["Scenario Comparison", "Summary Tables", "Water Balance", "Met & Flow Inputs", "YTD Performance"]
     )
 
     with tab_tables:
@@ -1212,3 +1337,26 @@ if 'forecast_df' in st.session_state:
             plt.close(fig_inp)
         else:
             st.info("Run the forecast to view meteorological and flow inputs.")
+
+    with tab_crps:
+        st.caption(
+            "CRPS (Continuous Ranked Probability Score) measures ensemble forecast accuracy — "
+            "lower is better. Computed retrospectively using actual observed Farr Pump and AT "
+            "operations and GEFS forecasts issued on each historical date."
+        )
+        with st.spinner("Computing year-to-date CRPS…"):
+            _today_str = pd.Timestamp.today().strftime('%Y-%m-%d')
+            crps_df = compute_ytd_crps(_today_str)
+        if crps_df.empty:
+            st.info("No verified forecast–observation pairs available yet for the current season.")
+        else:
+            fig_crps = make_crps_figure(crps_df)
+            st.pyplot(fig_crps)
+            plt.close(fig_crps)
+
+        st.subheader("2025 Season Reference Performance")
+        st.caption(
+            "CRPS by forecast lead day and month from the 2025 model test period "
+            "(BAKC2 deterministic flow forecast vs. persistence baseline)."
+        )
+        st.image(BASE_DIR / 'image.png', use_container_width=True)

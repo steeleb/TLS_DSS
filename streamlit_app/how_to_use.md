@@ -91,6 +91,17 @@ Diagnostic panel showing the model inputs for the selected initialization date:
 
 The dashed vertical line marks the boundary between observed data (left) and forecast inputs (right).
 
+#### YTD Performance
+
+Shows year-to-date **CRPS (Continuous Ranked Probability Score)** for the control scenario — a measure of ensemble forecast accuracy that rewards both sharpness and calibration. Lower CRPS indicates better forecast skill.
+
+- **X-axis** — Forecast horizon day (Day 1 = next-day forecast, Day 7 = 7-day-ahead forecast)
+- **Y-axis** — Mean CRPS (°C) averaged over all evaluated forecast–observation pairs at that horizon
+- **Two bar groups per horizon** — blue = 0–1 m depth, green = 0–5 m depth (integrated)
+- **n =** label on each bar — the number of forecast–observation pairs used to compute the mean; will grow as the season progresses
+
+CRPS is computed retrospectively: for each past date with an archived GEFS file, the model is run using the **actual observed Farr Pump and Adams Tunnel operations** and verified against buoy temperature observations. Only dates where both a GEFS operational file and buoy observations are available contribute to the score.
+
 ---
 
 ## Key Terms
@@ -104,6 +115,7 @@ The dashed vertical line marks the boundary between observed data (left) and for
 | **CBRFC / BAKC2** | Colorado Basin River Forecast Center streamflow forecast used to estimate tributary inflows |
 | **NF / EI / NI** | North Fork, East Inlet, North Inlet — tributary inflows to Grand Lake / SMR |
 | **Persistence** | Baseline scenario: prior day's pump and Adams Tunnel values held constant for all 7 days |
+| **CRPS** | Continuous Ranked Probability Score — measures ensemble forecast quality; accounts for both accuracy and spread. Lower is better. |
 | **cfs** | Cubic feet per second — unit of flow |
 
 ---
