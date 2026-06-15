@@ -28,6 +28,26 @@ st.set_page_config(
     layout="wide",
 )
 
+# ── Login gate ────────────────────────────────────────────────────────────────
+
+def _check_login():
+    if st.session_state.get('authenticated'):
+        return True
+    with st.form("login"):
+        st.subheader("Sign in")
+        pw = st.text_input("Password", type="password")
+        submitted = st.form_submit_button("Enter")
+    if submitted:
+        if pw == st.secrets["password"]:
+            st.session_state['authenticated'] = True
+            st.rerun()
+        else:
+            st.error("Incorrect password.")
+    return False
+
+if not _check_login():
+    st.stop()
+
 # ── Constants ─────────────────────────────────────────────────────────────────
 BASE_DIR        = Path(__file__).parent
 REPO_DIR        = BASE_DIR.parent
