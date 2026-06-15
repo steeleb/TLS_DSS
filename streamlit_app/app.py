@@ -191,7 +191,7 @@ def load_realtime_state(init_date):
 def _apply_reg(bakc2_cfs, coeff_df, month_abbrev):
     """Apply monthly linear regression: flow = intercept + slope * bakc2_cfs."""
     row = coeff_df.loc[month_abbrev]
-    return float(row['intercept'] + row['slope'] * bakc2_cfs)
+    return max(0.0, float(row['intercept'] + row['slope'] * bakc2_cfs))
 
 
 def get_bakc2_flow_estimates(init_date, bakc2_df, coeff_nf, coeff_ei, coeff_ni):
