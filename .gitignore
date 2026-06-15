@@ -25,3 +25,6 @@ model_submodule/model_dev/operational_model/dump/three_ten/*
 
 ## venv store
 .venv_streamlit/
+
+## Streamlit secrets (never commit passwords)
+.streamlit/secrets.toml
