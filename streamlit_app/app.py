@@ -75,6 +75,32 @@ def _show_help():
     st.markdown((BASE_DIR / "how_to_use.md").read_text())
 
 
+@st.dialog("Remove a Scenario")
+def _show_remove_dialog():
+    _removable_names = []
+    _removable_ids   = []
+    if st.session_state.get('_show_baseline', False):
+        _removable_names.append('Persistence')
+        _removable_ids.append('__persistence__')
+    for s in st.session_state.scenarios:
+        _removable_names.append(st.session_state.get(f'sc_name_{s["id"]}', s['name']))
+        _removable_ids.append(s['id'])
+    _remove_label = st.selectbox(
+        "Select scenario to remove",
+        options=_removable_names,
+        index=len(_removable_names) - 1,
+    )
+    _remove_sid = _removable_ids[_removable_names.index(_remove_label)]
+    col1, col2 = st.columns(2)
+    if col1.button("Confirm", type="primary", use_container_width=True):
+        if _remove_sid == '__persistence__':
+            st.session_state['_show_baseline'] = False
+        else:
+            _remove_scenario(sid=_remove_sid)
+        st.rerun()
+    col2.button("Cancel", use_container_width=True)
+
+
 # ── Cached loaders ────────────────────────────────────────────────────────────
 
 @st.cache_resource
@@ -424,7 +450,7 @@ def make_met_flow_figure(gefs_d, obs_df, abt_dict, ei_dict, ni_dict,
         sc_color = SCENARIO_COLORS[i % len(SCENARIO_COLORS)]
         pump_off = (2 * bar_idx     - (n_bars_fc - 1) / 2) * bar_w_fc
         abt_off  = (2 * bar_idx + 1 - (n_bars_fc - 1) / 2) * bar_w_fc
-        if is_retrospective and i == 0:
+        if is_retrospective:
             obs_mask = [
                 pd.notna(obs_df['pump_flow_cfs'].get(pd.Timestamp(td), np.nan) if obs_df is not None else np.nan) or
                 pd.notna(abt_dict.get(pd.Timestamp(td), np.nan))
@@ -435,13 +461,13 @@ def make_met_flow_figure(gefs_d, obs_df, abt_dict, ei_dict, ni_dict,
             p_free  = [p if not m else np.nan for p, m in zip(p_sch, obs_mask)]
             a_free  = [a if not m else np.nan for a, m in zip(a_sch, obs_mask)]
             ax.bar(fc_nums + pump_off, p_gray, width=bar_w_fc,
-                   color='#222222', alpha=0.8, hatch='///', edgecolor='white', label=f'{name} – Farr Pump')
+                   color='#222222', alpha=0.8, hatch='///', edgecolor='white')
             ax.bar(fc_nums + abt_off,  a_gray, width=bar_w_fc,
-                   color='#222222', alpha=0.8, label=f'{name} – AT')
+                   color='#222222', alpha=0.8)
             ax.bar(fc_nums + pump_off, p_free, width=bar_w_fc,
-                   color=sc_color, alpha=0.8, hatch='///', edgecolor='white')
+                   color=sc_color, alpha=0.8, hatch='///', edgecolor='white', label=f'{name} – Farr Pump')
             ax.bar(fc_nums + abt_off,  a_free, width=bar_w_fc,
-                   color=sc_color, alpha=0.8)
+                   color=sc_color, alpha=0.8, label=f'{name} – AT')
         else:
             ax.bar(fc_nums + pump_off, p_sch, width=bar_w_fc,
                    color=sc_color, alpha=0.8, hatch='///', edgecolor='white', label=f'{name} – Farr Pump')
@@ -584,9 +610,9 @@ def make_unified_figure(forecast_df, obs_df, abt_dict, init_date, scenario_names
 
     bar_w_obs = 0.35
     ax.bar(obs_nums - bar_w_obs / 2, pump_obs, width=bar_w_obs,
-           color='#888888', alpha=0.8, hatch='///', edgecolor='white', label='Observed – Farr Pump')
+           color='#222222', alpha=0.8, hatch='///', edgecolor='white', label='Observed – Farr Pump')
     ax.bar(obs_nums + bar_w_obs / 2, abt_obs,  width=bar_w_obs,
-           color='#888888', alpha=0.8, label='Observed – AT')
+           color='#222222', alpha=0.8, label='Observed – AT')
 
     show_persist_bars = persist_pump_sch is not None and persist_abt_sch is not None
     n_sc    = len(pump_schedules) + (1 if show_persist_bars else 0)
@@ -604,28 +630,28 @@ def make_unified_figure(forecast_df, obs_df, abt_dict, init_date, scenario_names
                color=c, alpha=0.6, label='Persistence – AT')
         bar_idx += 1
 
-    for idx, (name, pump_sch, abt_sch) in enumerate(zip(scenario_names, pump_schedules, abt_schedules)):
+    for name, pump_sch, abt_sch in zip(scenario_names, pump_schedules, abt_schedules):
         sc_color = color_map.get(name, '#000000')
         pump_off = (2 * bar_idx     - (n_bars - 1) / 2) * bar_w_fc
         abt_off  = (2 * bar_idx + 1 - (n_bars - 1) / 2) * bar_w_fc
-        if is_retrospective and idx == 0:
+        if is_retrospective:
             obs_mask = [
                 pd.notna(obs_df['pump_flow_cfs'].get(pd.Timestamp(td), np.nan) if obs_df is not None else np.nan) or
                 pd.notna(abt_dict.get(pd.Timestamp(td), np.nan))
                 for td in target_dates
             ]
-            pump_gray  = [p if m else np.nan for p, m in zip(pump_sch, obs_mask)]
-            abt_gray   = [a if m else np.nan for a, m in zip(abt_sch,  obs_mask)]
-            pump_free  = [p if not m else np.nan for p, m in zip(pump_sch, obs_mask)]
-            abt_free   = [a if not m else np.nan for a, m in zip(abt_sch,  obs_mask)]
-            ax.bar(fc_nums + pump_off, pump_gray, width=bar_w_fc,
-                   color='#888888', alpha=0.8, hatch='///', edgecolor='white', label=f'{name} – Farr Pump')
-            ax.bar(fc_nums + abt_off,  abt_gray,  width=bar_w_fc,
-                   color='#888888', alpha=0.8, label=f'{name} – AT')
+            pump_dark = [p if m else np.nan for p, m in zip(pump_sch, obs_mask)]
+            abt_dark  = [a if m else np.nan for a, m in zip(abt_sch,  obs_mask)]
+            pump_free = [p if not m else np.nan for p, m in zip(pump_sch, obs_mask)]
+            abt_free  = [a if not m else np.nan for a, m in zip(abt_sch,  obs_mask)]
+            ax.bar(fc_nums + pump_off, pump_dark, width=bar_w_fc,
+                   color='#222222', alpha=0.8, hatch='///', edgecolor='white')
+            ax.bar(fc_nums + abt_off,  abt_dark,  width=bar_w_fc,
+                   color='#222222', alpha=0.8)
             ax.bar(fc_nums + pump_off, pump_free, width=bar_w_fc,
-                   color=sc_color, alpha=0.8, hatch='///', edgecolor='white')
+                   color=sc_color, alpha=0.8, hatch='///', edgecolor='white', label=f'{name} – Farr Pump')
             ax.bar(fc_nums + abt_off,  abt_free,  width=bar_w_fc,
-                   color=sc_color, alpha=0.8)
+                   color=sc_color, alpha=0.8, label=f'{name} – AT')
         else:
             ax.bar(fc_nums + pump_off, pump_sch, width=bar_w_fc,
                    color=sc_color, alpha=0.8, hatch='///', edgecolor='white', label=f'{name} – Farr Pump')
@@ -662,39 +688,37 @@ def compute_water_balance(pump_schedule, abt_schedule, ei_flows, ni_flows, nf_fl
         ei       = ei_flows[h]
         ni       = ni_flows[h]
         nf       = nf_flows[h]
+        chipmunk = ei + ni - abt_schedule[j]
         total_in = pump_schedule[j] + ei + ni + nf
         smr_out  = total_in - abt_schedule[j]
         rows.append({
-            'Date':              (init_date + pd.Timedelta(days=j)).date(),
-            'Farr Pump (cfs)':   pump_schedule[j],
-            'EI (cfs)':          round(ei, 1),
-            'NI (cfs)':          round(ni, 1),
-            'NF (cfs)':          round(nf, 1),
-            'Total In (cfs)':    round(total_in, 1),
+            'Date':               (init_date + pd.Timedelta(days=j)).date(),
+            'Farr Pump (cfs)':    pump_schedule[j],
+            'EI (cfs)':           round(ei, 1),
+            'NI (cfs)':           round(ni, 1),
+            'NF (cfs)':           round(nf, 1),
+            'Total In (cfs)':     round(total_in, 1),
             'Adams Tunnel (cfs)': abt_schedule[j],
-            'SMR Outflow (cfs)': round(smr_out, 1),
-            'Deficit':           smr_out < 0,
+            'Chipmunk (cfs)':     round(chipmunk, 1),
+            'SMR Outflow (cfs)':  round(smr_out, 1),
+            'Deficit':            smr_out < 0,
         })
     return pd.DataFrame(rows)
 
 
 def make_summary(forecast_df, init_date, scenario_names, show_persistence):
+    all_scenarios = (['Persistence'] if show_persistence else []) + list(scenario_names)
     rows = []
-    persist_df = forecast_df[forecast_df['scenario'] == 'Persistence'] if show_persistence else None
 
     for h in HORIZONS:
         target_date = init_date + pd.Timedelta(days=h - 1)
         for pred_col, label in [('pred_1m', '1m'), ('pred_0_5m', '0_5m')]:
             row = {'horizon': h, 'target_date': str(target_date.date()), 'temp_target': label}
-            for sc_name in scenario_names:
+            for sc_name in all_scenarios:
                 sc_sub = forecast_df[
                     (forecast_df['scenario'] == sc_name) & (forecast_df['horizon'] == h)
                 ][pred_col]
                 row[f'[{sc_name}] mean_degC'] = round(sc_sub.mean(), 3)
-                row[f'[{sc_name}] std_degC']  = round(sc_sub.std(),  3)
-                if persist_df is not None:
-                    bl_sub = persist_df[persist_df['horizon'] == h][pred_col]
-                    row[f'[{sc_name}] delt_vs_persistence'] = round(sc_sub.mean() - bl_sub.mean(), 3)
             rows.append(row)
 
     return pd.DataFrame(rows)
@@ -833,7 +857,10 @@ def make_crps_figure(crps_df: pd.DataFrame):
 # ── Session state init ────────────────────────────────────────────────────────
 
 def _init_scenario(sid, name, pump_default=300, abt_default=200):
-    st.session_state[f'sc_name_{sid}'] = name
+    st.session_state[f'sc_name_{sid}']     = name
+    st.session_state[f'sc_static_{sid}']   = False
+    st.session_state[f'pump_static_{sid}'] = pump_default
+    st.session_state[f'abt_static_{sid}']  = abt_default
     for j in range(7):
         st.session_state[f'pump_{sid}_{j}'] = pump_default
         st.session_state[f'abt_{sid}_{j}']  = abt_default
@@ -857,14 +884,19 @@ def _add_scenario():
     _init_scenario(sid, name)
 
 
-def _remove_scenario():
-    if len(st.session_state.scenarios) > 1:
+def _remove_scenario(sid=None):
+    if len(st.session_state.scenarios) <= 1:
+        return
+    if sid is None:
         removed = st.session_state.scenarios.pop()
         sid = removed['id']
-        for key in ([f'sc_name_{sid}'] +
-                    [f'pump_{sid}_{j}' for j in range(7)] +
-                    [f'abt_{sid}_{j}'  for j in range(7)]):
-            st.session_state.pop(key, None)
+    else:
+        st.session_state.scenarios = [s for s in st.session_state.scenarios if s['id'] != sid]
+    for key in ([f'sc_name_{sid}', f'sc_static_{sid}',
+                 f'pump_static_{sid}', f'abt_static_{sid}'] +
+                [f'pump_{sid}_{j}' for j in range(7)] +
+                [f'abt_{sid}_{j}'  for j in range(7)]):
+        st.session_state.pop(key, None)
 
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
@@ -986,30 +1018,48 @@ with st.sidebar:
                    f"Adams Tunnel {persist_abt:.0f} cfs{_abt_note}")
 
     st.subheader("Operational Scenarios")
+    st.checkbox(
+        "Show persistence (previous day pump/AT operations)",
+        key='_show_baseline',
+    )
 
     _max_scenarios = 2 if is_retrospective else 4
+    _at_max = len(st.session_state.scenarios) >= _max_scenarios
     c1, c2 = st.columns(2)
-    c1.button("＋ Add",    on_click=_add_scenario,    key="btn_add",
-              disabled=len(st.session_state.scenarios) >= _max_scenarios,
+    c1.button("＋ Add", on_click=_add_scenario, key="btn_add",
+              disabled=_at_max,
               use_container_width=True)
-    c2.button("－ Remove", on_click=_remove_scenario, key="btn_remove",
-              disabled=len(st.session_state.scenarios) <= 1,
-              use_container_width=True)
+    if _at_max:
+        st.caption("You have reached the maximum scenarios for this date.")
+
+    _can_remove = len(st.session_state.scenarios) > 1 or st.session_state.get('_show_baseline', False)
+    if c2.button("－ Remove a scenario", key="btn_remove",
+                 disabled=not _can_remove, use_container_width=True):
+        _show_remove_dialog()
+
+    # Pre-compute auto-names for static scenarios so tab labels are up to date
+    for sc in st.session_state.scenarios:
+        sid = sc['id']
+        if st.session_state.get(f'sc_static_{sid}', False):
+            _pv = st.session_state.get(f'pump_static_{sid}', 300)
+            _av = st.session_state.get(f'abt_static_{sid}',  200)
+            st.session_state[f'sc_name_{sid}'] = f"{_pv} cfs pump, {_av} cfs AT"
 
     # Sync display names before creating tabs
     for sc in st.session_state.scenarios:
         sc['name'] = st.session_state.get(f'sc_name_{sc["id"]}', sc['name'])
 
-    sc_tabs = st.tabs([sc['name'] for sc in st.session_state.scenarios])
+    _show_baseline_tabs = st.session_state.get('_show_baseline', False)
+    _tab_names = [sc['name'] for sc in st.session_state.scenarios]
+    if _show_baseline_tabs:
+        _tab_names = ['Persistence'] + _tab_names
 
-    for i, (tab, sc) in enumerate(zip(sc_tabs, st.session_state.scenarios)):
-        sid = sc['id']
-        lock_sc_a = is_retrospective and (i == 0)
-        with tab:
-            st.text_input("Name", key=f'sc_name_{sid}', disabled=lock_sc_a)
-            if lock_sc_a:
-                st.caption("Scenario A reflects observed operations. Days with observed data cannot be edited.")
+    sc_tabs = st.tabs(_tab_names)
 
+    _tab_offset = 0
+    if _show_baseline_tabs:
+        with sc_tabs[0]:
+            st.caption("Previous day pump/AT operations, repeated for all 7 days.")
             h1, h2, h3 = st.columns(3)
             h1.write("**Date**")
             h2.write("**Farr Pump (cfs)**")
@@ -1019,17 +1069,57 @@ with st.sidebar:
                 lbl = f"{day_date.strftime('%a %b')} {day_date.day}"
                 c1, c2, c3 = st.columns(3)
                 c1.write(lbl)
+                c2.write(f"{int(persist_pump) if not np.isnan(persist_pump) else 'N/A'}")
+                c3.write(f"{int(persist_abt)  if not np.isnan(persist_abt)  else 'N/A'}")
+        _tab_offset = 1
+
+    for i, (tab, sc) in enumerate(zip(sc_tabs[_tab_offset:], st.session_state.scenarios)):
+        sid = sc['id']
+        lock_sc_a = is_retrospective and (i == 0)
+        with tab:
+            is_static = st.session_state.get(f'sc_static_{sid}', False)
+
+            if not lock_sc_a:
+                st.checkbox("Static operations (same values all 7 days)", key=f'sc_static_{sid}')
+                is_static = st.session_state.get(f'sc_static_{sid}', False)
+
+            if is_static:
+                c_pump, c_abt = st.columns(2)
+                pump_val = c_pump.number_input("Farr Pump (cfs)", min_value=0, max_value=800, step=50,
+                                               key=f'pump_static_{sid}')
+                abt_val  = c_abt.number_input("Adams Tunnel (cfs)", min_value=0, max_value=600, step=50,
+                                              key=f'abt_static_{sid}')
+                auto_name = f"{pump_val} cfs pump, {abt_val} cfs AT"
+                st.session_state[f'sc_name_{sid}'] = auto_name
+                st.text_input("Name", key=f'sc_name_{sid}', disabled=True)
+                for j in range(7):
+                    st.session_state[f'pump_{sid}_{j}'] = pump_val
+                    st.session_state[f'abt_{sid}_{j}']  = abt_val
+            else:
+                st.text_input("Name", key=f'sc_name_{sid}', disabled=lock_sc_a)
                 if lock_sc_a:
-                    lock_pump = pd.notna(obs_df['pump_flow_cfs'].get(day_date, np.nan))
-                    lock_abt  = pd.notna(abt_dict.get(day_date, np.nan))
-                else:
-                    lock_pump = lock_abt = False
-                c2.number_input(lbl, min_value=0, max_value=800, step=50,
-                                key=f'pump_{sid}_{j}', label_visibility="collapsed",
-                                disabled=lock_pump)
-                c3.number_input(lbl, min_value=0, max_value=600, step=50,
-                                key=f'abt_{sid}_{j}', label_visibility="collapsed",
-                                disabled=lock_abt)
+                    st.caption("Scenario A reflects observed operations. Days with observed data cannot be edited.")
+
+                h1, h2, h3 = st.columns(3)
+                h1.write("**Date**")
+                h2.write("**Farr Pump (cfs)**")
+                h3.write("**Adams Tunnel (cfs)**")
+                for j in range(7):
+                    day_date = init_date + pd.Timedelta(days=j)
+                    lbl = f"{day_date.strftime('%a %b')} {day_date.day}"
+                    c1, c2, c3 = st.columns(3)
+                    c1.write(lbl)
+                    if lock_sc_a:
+                        lock_pump = pd.notna(obs_df['pump_flow_cfs'].get(day_date, np.nan))
+                        lock_abt  = pd.notna(abt_dict.get(day_date, np.nan))
+                    else:
+                        lock_pump = lock_abt = False
+                    c2.number_input(lbl, min_value=0, max_value=800, step=50,
+                                    key=f'pump_{sid}_{j}', label_visibility="collapsed",
+                                    disabled=lock_pump)
+                    c3.number_input(lbl, min_value=0, max_value=600, step=50,
+                                    key=f'abt_{sid}_{j}', label_visibility="collapsed",
+                                    disabled=lock_abt)
 
             # ── Water balance check (live) ────────────────────────────────────
             if prev_ok:
@@ -1041,6 +1131,13 @@ with st.sidebar:
                 if not _deficit_rows.empty:
                     day_strs = ', '.join(str(d) for d in _deficit_rows['Date'])
                     st.warning(f"Inflow < AT on: {day_strs} — reservoir volume will be impacted.")
+
+    _current_names     = [st.session_state.get(f'sc_name_{sc["id"]}', sc['name'])
+                          for sc in st.session_state.scenarios]
+    _has_name_conflict = (len(_current_names) != len(set(_current_names))
+                          or 'Persistence' in _current_names)
+    if _has_name_conflict:
+        st.error('Scenario names must be unique and cannot be named "Persistence".')
 
 
 # ── Scenario fingerprint for auto-run detection ───────────────────────────────
@@ -1077,7 +1174,7 @@ if _fingerprint_changed:
         time.sleep(0.5 - elapsed)
         st.rerun()
 
-should_run = can_run and _fingerprint_changed
+should_run = can_run and _fingerprint_changed and not _has_name_conflict
 
 if should_run:
     cv_models, cv_scalers, feature_cols = load_models()
@@ -1147,6 +1244,9 @@ if should_run:
         wb_by_scenario[name] = compute_water_balance(
             pump_sch, abt_sch, ei_flows, ni_flows, nf_flows, init_date
         )
+    wb_by_scenario['Persistence'] = compute_water_balance(
+        persist_pump_sch, persist_abt_sch, ei_flows, ni_flows, nf_flows, init_date
+    )
     st.session_state['water_balance'] = wb_by_scenario
 
     st.session_state['gefs_d_raw']         = gefs_d
@@ -1167,11 +1267,7 @@ if 'forecast_df' in st.session_state:
     _names = st.session_state['forecast_scenario_names']
     _idate = st.session_state['forecast_init_date']
 
-    show_baseline = st.checkbox(
-        "Show persistence (previous day pump/AT operations)",
-        value=st.session_state['_show_baseline'],
-    )
-    st.session_state['_show_baseline'] = show_baseline
+    show_baseline = st.session_state.get('_show_baseline', False)
 
     disp_df = _fdf if show_baseline else _fdf[_fdf['scenario'] != 'Persistence']
 
@@ -1201,16 +1297,15 @@ if 'forecast_df' in st.session_state:
     plt.close(fig)
 
     tab_compare, tab_tables, tab_wb, tab_inputs, tab_crps = st.tabs(
-        ["Scenario Comparison", "Summary Tables", "Water Balance", "Met & Flow Inputs", "YTD Performance"]
+        ["Scenario Comparison", "Forecast Temperatures", "Water Balance", "Met & Flow Inputs", "YTD Performance"]
     )
 
     with tab_tables:
         summary = make_summary(_fdf, _idate, _names, show_baseline)
-        _drop_cols = ['temp_target', 'horizon'] + [c for c in summary.columns if 'std_degC' in c]
+        _drop_cols = ['temp_target', 'horizon']
         _rename = lambda c: (
             'Forecast Date' if c == 'target_date'
             else c.replace('mean_degC', 'Mean Predicted Water Temperature (°C)')
-                   .replace('delt_vs_persistence', 'Departure from Persistence Forecast')
         )
 
         st.subheader("0–1 m depth (near-surface)")
@@ -1239,12 +1334,14 @@ if 'forecast_df' in st.session_state:
     with tab_wb:
         st.caption(
             "SMR volume is constant. Total inflow = Farr Pump + EI + NI + NF. "
+            "Chipmunk (estimated) = EI + NI − AT. "
             "SMR Outflow = Total Inflow − AT. Rows where inflow < AT are flagged "
             "— the reservoir cannot sustain that operation without drawing down volume."
         )
         if 'water_balance' in st.session_state:
             _wb_dict = st.session_state['water_balance']
-            for name in _names:
+            _wb_display_names = (['Persistence'] if show_baseline else []) + list(_names)
+            for name in _wb_display_names:
                 if name not in _wb_dict:
                     continue
                 wb = _wb_dict[name]
@@ -1266,37 +1363,43 @@ if 'forecast_df' in st.session_state:
                 )
 
     with tab_compare:
-        all_options = ['Persistence'] + _names
-        ref_sc = st.selectbox(
-            "Reference scenario (all others compared against this):",
-            options=all_options,
-            index=0,
-            key='compare_ref',
-        )
+        all_options = (['Persistence'] if show_baseline else []) + _names
 
-        ref_agg = (
-            _fdf[_fdf['scenario'] == ref_sc]
-            .groupby('target_date')[['pred_1m', 'pred_0_5m']].mean()
-        )
+        if len(all_options) <= 1:
+            st.info(
+                "Add another scenario, or check **Show persistence** in the sidebar, "
+                "to enable scenario comparison."
+            )
+        else:
+            ref_sc = st.selectbox(
+                "Reference scenario (all others compared against this):",
+                options=all_options,
+                index=0,
+                key='compare_ref',
+            )
 
-        compare_scs = [s for s in all_options if s != ref_sc]
-        rows_1m, rows_05m = [], []
-        for sc in compare_scs:
-            sc_agg = (
-                _fdf[_fdf['scenario'] == sc]
+            ref_agg = (
+                _fdf[_fdf['scenario'] == ref_sc]
                 .groupby('target_date')[['pred_1m', 'pred_0_5m']].mean()
             )
-            diff = sc_agg - ref_agg
-            row_1m  = {'Scenario': sc}
-            row_05m = {'Scenario': sc}
-            for td in sorted(diff.index):
-                lbl = pd.Timestamp(td).strftime('%b %-d')
-                row_1m[lbl]  = round(float(diff.loc[td, 'pred_1m']),  2)
-                row_05m[lbl] = round(float(diff.loc[td, 'pred_0_5m']), 2)
-            rows_1m.append(row_1m)
-            rows_05m.append(row_05m)
 
-        if compare_scs:
+            compare_scs = [s for s in all_options if s != ref_sc]
+            rows_1m, rows_05m = [], []
+            for sc in compare_scs:
+                sc_agg = (
+                    _fdf[_fdf['scenario'] == sc]
+                    .groupby('target_date')[['pred_1m', 'pred_0_5m']].mean()
+                )
+                diff = sc_agg - ref_agg
+                row_1m  = {'Scenario': sc}
+                row_05m = {'Scenario': sc}
+                for td in sorted(diff.index):
+                    lbl = pd.Timestamp(td).strftime('%b %-d')
+                    row_1m[lbl]  = round(float(diff.loc[td, 'pred_1m']),  2)
+                    row_05m[lbl] = round(float(diff.loc[td, 'pred_0_5m']), 2)
+                rows_1m.append(row_1m)
+                rows_05m.append(row_05m)
+
             st.caption(
                 f"Delta °C = scenario mean − {ref_sc} mean. "
                 "Positive = warmer than reference; negative = cooler."
@@ -1327,8 +1430,6 @@ if 'forecast_df' in st.session_state:
                 ).format({c: '{:+.2f}' for c in date_cols}),
                 use_container_width=True, hide_index=True,
             )
-        else:
-            st.info("Add at least two scenarios to enable comparison.")
 
     with tab_inputs:
         if 'gefs_d_raw' in st.session_state:
