@@ -10,8 +10,10 @@ from io import StringIO
 
 # --- Constants -----------------------------------------------------------
 
-CBRFC_URL  = "https://www.cbrfc.noaa.gov/product/hydrofcst/RVFCSV/BAKC2.fflw24.csv"
-SITE_ID    = "BAKC2"
+SITES = {
+    "BAKC2": "https://www.cbrfc.noaa.gov/product/hydrofcst/RVFCSV/BAKC2.fflw24.csv",
+    "SMRC2": "https://www.cbrfc.noaa.gov/product/hydrofcst/RVFCSV/SMRC2.fflw24.csv",
+}
 
 OUTPUT_DIR = os.environ.get(
     'CBRFC_OUTPUT_DIR',
@@ -21,14 +23,14 @@ OUTPUT_DIR = os.environ.get(
 
 # --- Core function -------------------------------------------------------
 
-def fetch_cbrfc_bakc2(run_date: str) -> None:
-    output_path = os.path.join(OUTPUT_DIR, f"CBRFC_{SITE_ID}_{run_date}.csv")
+def fetch_cbrfc_site(site_id: str, url: str, run_date: str) -> None:
+    output_path = os.path.join(OUTPUT_DIR, f"CBRFC_{site_id}_{run_date}.csv")
     if os.path.exists(output_path):
-        print(f"Skipping CBRFC {SITE_ID} {run_date} — file already exists.")
+        print(f"Skipping CBRFC {site_id} {run_date} — file already exists.")
         return
 
-    print(f"Fetching CBRFC {SITE_ID} forecast for {run_date}...")
-    resp = requests.get(CBRFC_URL, timeout=30)
+    print(f"Fetching CBRFC {site_id} forecast for {run_date}...")
+    resp = requests.get(url, timeout=30)
     resp.raise_for_status()
 
     lines = resp.text.splitlines()
@@ -36,13 +38,13 @@ def fetch_cbrfc_bakc2(run_date: str) -> None:
     try:
         header_idx = next(i for i, ln in enumerate(lines) if ln.upper().startswith('DATE'))
     except StopIteration:
-        print("Could not locate DATE header in CBRFC response.", file=sys.stderr)
+        print(f"Could not locate DATE header in CBRFC response for {site_id}.", file=sys.stderr)
         sys.exit(1)
 
     df = pd.read_csv(StringIO('\n'.join(lines[header_idx:])))
     df.columns = df.columns.str.strip()
     df['issued_date'] = run_date
-    df['site_id']     = SITE_ID
+    df['site_id']     = site_id
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     df[['site_id', 'issued_date', 'DATE', 'TIME', 'FLOW']].to_csv(output_path, index=False)
@@ -53,7 +55,7 @@ def fetch_cbrfc_bakc2(run_date: str) -> None:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        description=f"Fetch today's CBRFC deterministic forecast for {SITE_ID}."
+        description="Fetch today's CBRFC deterministic forecasts for all configured sites."
     )
     parser.add_argument(
         '--date', default=None,
@@ -62,4 +64,5 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     run_date = args.date if args.date else date.today().strftime('%Y-%m-%d')
-    fetch_cbrfc_bakc2(run_date)
+    for site_id, url in SITES.items():
+        fetch_cbrfc_site(site_id, url, run_date)
