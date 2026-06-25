@@ -64,12 +64,18 @@ A day-by-day breakdown of SMR inflows and outflows for each scenario:
 | Column | Description |
 |---|---|
 | Farr Pump | Pumped inflow you specified |
-| EI / NI / NF | East Inlet, North Inlet, North Fork (from CBRFC forecast) |
+| EI / NI / NF | East Inlet, North Inlet, North Fork (apportioned from SMRC2 forecast — see below) |
 | Total In | Sum of all inflows |
 | Adams Tunnel | Delivery out of SMR you specified |
 | SMR Outflow | Total In minus Adams Tunnel |
 
 Rows where **SMR Outflow < 0** are highlighted in red — those days would require drawing down reservoir storage.
+
+**How tributary inflows are estimated:** The app uses the CBRFC **SMRC2** forecast (total streamflow at Shadow Mountain Reservoir) to project East Inlet, North Inlet, and North Fork flows over the 7-day window. Because SMRC2 gives only a combined total, it is apportioned to the three tributaries using the proportions observed on the prior day:
+
+> prop(EI) = EI_observed / (EI + NI + NF)_observed, and similarly for NI and NF.
+
+Each day's SMRC2 forecast total is then multiplied by those fixed proportions to get per-tributary estimates (minimum 1 cfs applied to each). **Day 1** always uses prior-day observed values directly, since the SMRC2 forecast does not issue a same-day value. If SMRC2 data are unavailable for any day, that day also falls back to prior-day observed values (persistence). The proportions used are shown in the sidebar caption beneath the initialization date.
 
 #### Scenario Comparison
 
@@ -112,7 +118,9 @@ CRPS is computed retrospectively: for each past date with an archived GEFS file,
 | **Farr Pump** | Pump that moves water from the Colorado River into SMR |
 | **Adams Tunnel (AT)** | Transmountain diversion that delivers water out of SMR to the Front Range |
 | **GEFS** | Global Ensemble Forecast System — NOAA's meteorological ensemble used as model input |
-| **CBRFC / BAKC2** | Colorado Basin River Forecast Center streamflow forecast used to estimate tributary inflows |
+| **CBRFC** | Colorado Basin River Forecast Center — issues operational streamflow forecasts used to estimate tributary inflows |
+| **SMRC2** | CBRFC forecast point at Shadow Mountain Reservoir (Colorado River); provides total inflow forecast that is apportioned to EI, NI, and NF |
+| **BAKC2** | CBRFC forecast point on the Colorado River above Granby; used in historical model development |
 | **NF / EI / NI** | North Fork, East Inlet, North Inlet — tributary inflows to Grand Lake / SMR |
 | **Persistence** | Baseline scenario: prior day's pump and Adams Tunnel values held constant for all 7 days |
 | **CRPS** | Continuous Ranked Probability Score — measures ensemble forecast quality; accounts for both accuracy and spread. Lower is better. |

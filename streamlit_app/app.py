@@ -137,11 +137,25 @@ def load_data():
     else:
         bakc2_df = pd.DataFrame(columns=['issue_date', 'date', 'flow_cfs'])
 
-    coeff_nf = pd.read_csv(FLOW_DIR / 'northfork_q_handoff_COLBAKCO_COLGRAND.csv').set_index('month')
-    coeff_ei = pd.read_csv(FLOW_DIR / 'northfork_q_handoff_COLBAKCO_EASINLET.csv').set_index('month')
-    coeff_ni = pd.read_csv(FLOW_DIR / 'northfork_q_handoff_COLBAKCO_NORINLET.csv').set_index('month')
+    smrc2_files = sorted(CBRFC_DIR.glob('CBRFC_SMRC2_*.csv'))
+    if smrc2_files:
+        frames = []
+        for f in smrc2_files:
+            df = pd.read_csv(f)
+            df['issue_date'] = pd.to_datetime(df['issued_date'])
+            df['date']       = pd.to_datetime(df['DATE'], format='mixed')
+            df['flow_cfs']   = df['FLOW']
+            frames.append(df[['issue_date', 'date', 'flow_cfs']])
+        smrc2_df = pd.concat(frames, ignore_index=True)
+    else:
+        smrc2_df = pd.DataFrame(columns=['issue_date', 'date', 'flow_cfs'])
 
-    return abt_dict, ei_dict, ni_dict, bakc2_df, coeff_nf, coeff_ei, coeff_ni
+    coeff_nf = pd.read_csv(FLOW_DIR / 'northfork_q_handoff_COLBAKCO_COLGRAND.csv').set_index('month')
+    handoff  = pd.read_csv(FLOW_DIR / 'bakc2_handoff.csv').set_index('location')
+    coeff_ei = handoff.loc['East Inlet'][['intercept', 'slope']]
+    coeff_ni = handoff.loc['North Inlet'][['intercept', 'slope']]
+
+    return abt_dict, ei_dict, ni_dict, bakc2_df, smrc2_df, coeff_nf, coeff_ei, coeff_ni
 
 
 @st.cache_data(ttl=3600)
@@ -234,10 +248,9 @@ def load_realtime_state(init_date):
 
 # ── Core model logic  ───────────────────────────────
 
-def _apply_reg(bakc2_cfs, coeff_df, month_abbrev):
-    """Apply monthly linear regression: flow = intercept + slope * bakc2_cfs."""
-    row = coeff_df.loc[month_abbrev]
-    return max(0.0, float(row['intercept'] + row['slope'] * bakc2_cfs))
+def _apply_reg(bakc2_cfs, coeff):
+    """Apply linear regression: flow = intercept + slope * bakc2_cfs."""
+    return max(1, float(coeff['intercept'] + coeff['slope'] * bakc2_cfs))
 
 
 def get_bakc2_flow_estimates(init_date, bakc2_df, coeff_nf, coeff_ei, coeff_ni):
@@ -268,9 +281,48 @@ def get_bakc2_flow_estimates(init_date, bakc2_df, coeff_nf, coeff_ei, coeff_ni):
 
         bakc2_cfs    = float(row.iloc[0]['flow_cfs'])
         month_abbrev = target_date.strftime('%b')
-        nf_est[h] = _apply_reg(bakc2_cfs, coeff_nf, month_abbrev)
-        ei_est[h] = _apply_reg(bakc2_cfs, coeff_ei, month_abbrev)
-        ni_est[h] = _apply_reg(bakc2_cfs, coeff_ni, month_abbrev)
+        nf_est[h] = _apply_reg(bakc2_cfs, coeff_nf.loc[month_abbrev])
+        ei_est[h] = _apply_reg(bakc2_cfs, coeff_ei)
+        ni_est[h] = _apply_reg(bakc2_cfs, coeff_ni)
+
+    return nf_est, ei_est, ni_est
+
+
+def get_smrc2_flow_estimates(init_date, smrc2_df, persist_ei, persist_ni, persist_nf):
+    """Return per-horizon dicts of EI, NI, NF by apportioning the SMRC2 forecast.
+
+    Proportions are derived from the most recent observed prior-day flows.
+    SMRC2 forecasts start on day 2 (next day after issuance), so h=1 returns None
+    and the caller falls back to persistence.
+    """
+    total = persist_ei + persist_ni + persist_nf
+    if total <= 0 or any(np.isnan(x) for x in (persist_ei, persist_ni, persist_nf)):
+        prop_ei = prop_ni = prop_nf = 1 / 3
+    else:
+        prop_ei = persist_ei / total
+        prop_ni = persist_ni / total
+        prop_nf = persist_nf / total
+
+    nf_est = {}
+    ei_est = {}
+    ni_est = {}
+    prev_day = init_date - pd.Timedelta(days=1)
+
+    issued_today = smrc2_df[smrc2_df['issue_date'] == init_date]
+    issued_prev  = smrc2_df[smrc2_df['issue_date'] == prev_day]
+
+    for h in HORIZONS:
+        target_date = init_date + pd.Timedelta(days=h - 1)
+        row = issued_today[issued_today['date'] == target_date]
+        if row.empty:
+            row = issued_prev[issued_prev['date'] == target_date]
+        if row.empty:
+            nf_est[h] = ei_est[h] = ni_est[h] = None
+            continue
+        smrc2_cfs = float(row.iloc[0]['flow_cfs'])
+        ei_est[h] = max(1, smrc2_cfs * prop_ei)
+        ni_est[h] = max(1, smrc2_cfs * prop_ni)
+        nf_est[h] = max(1, smrc2_cfs * prop_nf)
 
     return nf_est, ei_est, ni_est
 
@@ -746,7 +798,7 @@ def _prep_gefs_d(gefs_path):
 def compute_ytd_crps(today_str: str) -> pd.DataFrame:
     """Retrospective CRPS over all archived GEFS dates with matching observations."""
     cv_models, cv_scalers, feature_cols = load_models()
-    abt_dict, ei_dict, ni_dict, bakc2_df, coeff_nf, coeff_ei, coeff_ni = load_data()
+    abt_dict, ei_dict, ni_dict, bakc2_df, smrc2_df, coeff_nf, coeff_ei, coeff_ni = load_data()
 
     pump_raw = pd.read_csv(RAW_DIR / 'granby_daily_pump_data.csv', parse_dates=['date'])
     pump_ser = pump_raw.set_index('date')['value'].ffill()
@@ -913,7 +965,7 @@ with st.sidebar:
     st.header("Forecast Settings")
 
     # Load static data (cached)
-    abt_dict, ei_dict, ni_dict, bakc2_df, coeff_nf, coeff_ei, coeff_ni = load_data()
+    abt_dict, ei_dict, ni_dict, bakc2_df, smrc2_df, coeff_nf, coeff_ei, coeff_ni = load_data()
 
     # Date range from available GEFS operational files, restricted to Jun 1–Sep 30
     gefs_files = sorted(GEFS_DIR.glob('GEFS_p25_*.csv'))
@@ -972,12 +1024,12 @@ with st.sidebar:
 
     prev_ok = not (np.isnan(persist_pump) or np.isnan(persist_nf))
 
-    # BAKC2-derived flow estimates
-    nf_est, ei_est, ni_est = get_bakc2_flow_estimates(
-        init_date, bakc2_df, coeff_nf, coeff_ei, coeff_ni
+    # Flow estimates via SMRC2 proportional apportionment
+    nf_est, ei_est, ni_est = get_smrc2_flow_estimates(
+        init_date, smrc2_df, persist_ei, persist_ni, persist_nf
     )
 
-    # Resolve per-horizon flow dicts (fall back to persistence where BAKC2 is missing)
+    # Resolve per-horizon flow dicts (fall back to persistence where estimate is missing)
     nf_flows = {h: nf_est[h] if nf_est.get(h) is not None else persist_nf for h in HORIZONS}
     ei_flows = {h: ei_est[h] if ei_est.get(h) is not None else persist_ei for h in HORIZONS}
     ni_flows = {h: ni_est[h] if ni_est.get(h) is not None else persist_ni for h in HORIZONS}
@@ -1016,6 +1068,16 @@ with st.sidebar:
         st.caption(f"**Prior-day ops ({prev_date.strftime('%b %-d')}):**  \n"
                    f"Farr Pump {persist_pump:.0f} cfs{_pump_note}  \n"
                    f"Adams Tunnel {persist_abt:.0f} cfs{_abt_note}")
+
+    _smrc2_available = any(nf_est.get(h) is not None for h in range(2, 8))
+    _smrc2_note = ("**We are working to get the backdated SMRC2 streamflow forecasts (NOAA's deterministic forecast that encompases NF, NI, EI flows). No stremflow forecast is available for this date — prior-day persistence used for all tributary inflows.**"
+                   if not _smrc2_available else "")
+    st.caption(
+        f"**Tributary inflow forecast** uses SMRC2 proportional apportionment. "
+        f"Proportions are based on {prev_date.strftime('%b %-d')} observed flows "
+        f"(EI {persist_ei:.0f} cfs, NI {persist_ni:.0f} cfs, NF {persist_nf:.0f} cfs).\n\n"
+        f"{_smrc2_note}"
+    )
 
     st.subheader("Operational Scenarios")
     st.checkbox(
@@ -1178,7 +1240,7 @@ should_run = can_run and _fingerprint_changed and not _has_name_conflict
 
 if should_run:
     cv_models, cv_scalers, feature_cols = load_models()
-    abt_dict, ei_dict, ni_dict, bakc2_df, coeff_nf, coeff_ei, coeff_ni = load_data()
+    abt_dict, ei_dict, ni_dict, bakc2_df, smrc2_df, coeff_nf, coeff_ei, coeff_ni = load_data()
     realtime_state, obs_df = load_realtime_state(init_date)
     nf_flows = st.session_state['nf_flows']
     ei_flows = st.session_state['ei_flows']
@@ -1433,7 +1495,7 @@ if 'forecast_df' in st.session_state:
 
     with tab_inputs:
         if 'gefs_d_raw' in st.session_state:
-            abt_dict, ei_dict, ni_dict, bakc2_df, coeff_nf, coeff_ei, coeff_ni = load_data()
+            abt_dict, ei_dict, ni_dict, bakc2_df, smrc2_df, coeff_nf, coeff_ei, coeff_ni = load_data()
             fig_inp = make_met_flow_figure(
                 st.session_state['gefs_d_raw'],
                 st.session_state['obs_df'],

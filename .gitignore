@@ -28,3 +28,4 @@ model_submodule/model_dev/operational_model/dump/three_ten/*
 
 ## Streamlit secrets (never commit passwords)
 .streamlit/secrets.toml
+.positai
