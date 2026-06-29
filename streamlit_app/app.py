@@ -6,6 +6,7 @@ Run with:
 """
 import io
 import json
+import tarfile
 import time
 import warnings
 warnings.filterwarnings('ignore')
@@ -54,6 +55,7 @@ REPO_DIR        = BASE_DIR.parent
 MODEL_DIR       = (REPO_DIR / 'model_submodule' / 'model_dev' / 'lagged_temp').resolve()
 GEFS_DIR        = (REPO_DIR / 'data_submodule' / 'forecasts' / 'GEFS_operational').resolve()
 CBRFC_DIR       = (REPO_DIR / 'data_submodule' / 'forecasts' / 'CBRFC_operational').resolve()
+CBRFC_HIST_DIR  = (REPO_DIR / 'data_submodule' / 'forecasts' / 'CBRFC_historical').resolve()
 RAW_DIR         = (REPO_DIR / 'data_submodule' / 'raw_data' / 'target_output').resolve()
 FLOW_DIR        = (REPO_DIR / 'data_submodule' / 'streamflow').resolve()
 
@@ -112,6 +114,54 @@ def load_models():
     return cv_models, cv_scalers, feature_cols
 
 
+def _load_smrc2_historical(hist_dir: Path) -> pd.DataFrame:
+    """Parse SMRC2 daily forecast files from tar archives in hist_dir.
+
+    Each tar contains files named smrc2_dly.YYYYMMDD.csv.  The issue date is
+    taken from the filename; the body is a fixed-header CSV with DATE,TOTAL columns.
+    """
+    frames = []
+    for tar_path in sorted(hist_dir.glob('smrc2.*.tar')):
+        with tarfile.open(tar_path) as tf:
+            for member in tf.getmembers():
+                stem = Path(member.name).stem          # e.g. smrc2_dly.20260601
+                date_part = stem.rsplit('.', 1)[-1]    # e.g. 20260601
+                try:
+                    issue_date = pd.Timestamp(date_part)
+                except Exception:
+                    continue
+                fobj = tf.extractfile(member)
+                if fobj is None:
+                    continue
+                lines = fobj.read().decode('utf-8').splitlines()
+                # Locate the header row so we know where data begins
+                data_start = None
+                for i, line in enumerate(lines):
+                    if line.startswith('DATE,TOTAL'):
+                        data_start = i + 1
+                        break
+                if data_start is None:
+                    continue
+                for line in lines[data_start:]:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    cols = line.split(',')
+                    if len(cols) < 2:
+                        continue
+                    try:
+                        frames.append({
+                            'issue_date': issue_date,
+                            'date':       pd.Timestamp(cols[0]),
+                            'flow_cfs':   float(cols[1]),
+                        })
+                    except Exception:
+                        continue
+    if frames:
+        return pd.DataFrame(frames)
+    return pd.DataFrame(columns=['issue_date', 'date', 'flow_cfs'])
+
+
 @st.cache_data(ttl=3600)
 def load_data():
     # File names:
@@ -149,6 +199,13 @@ def load_data():
         smrc2_df = pd.concat(frames, ignore_index=True)
     else:
         smrc2_df = pd.DataFrame(columns=['issue_date', 'date', 'flow_cfs'])
+
+    # Merge historical SMRC2 — operational files take priority for duplicate issue dates
+    hist_smrc2_df = _load_smrc2_historical(CBRFC_HIST_DIR)
+    if not hist_smrc2_df.empty:
+        op_issue_dates = set(smrc2_df['issue_date'].unique())
+        hist_filtered  = hist_smrc2_df[~hist_smrc2_df['issue_date'].isin(op_issue_dates)]
+        smrc2_df = pd.concat([hist_filtered, smrc2_df], ignore_index=True)
 
     coeff_nf = pd.read_csv(FLOW_DIR / 'northfork_q_handoff_COLBAKCO_COLGRAND.csv').set_index('month')
     handoff  = pd.read_csv(FLOW_DIR / 'bakc2_handoff.csv').set_index('location')
